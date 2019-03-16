@@ -128,18 +128,21 @@ local function set_loop(tr,startp,seql)
 end
 
 local function save_project(num)
+  if util.file_exists(_path.dust .. "takt/data") == false then
+    util.make_dir(_path.dust .. "takt/data")
+  end
   data[pattern].bpm = params:get("bpm")
   data.lastpattern = pattern
-  tab.save(data,"/home/we/dust/data/bedtime/takt-pat-"..num ..".data")
-  params:write("bedtime/takt-param-"..num ..".pset")
+  tab.save(data,_path.dust .. "takt/data/takt-pat-"..num ..".data")
+  params:write(_path.dust .. "takt/data/takt-param-"..num ..".pset")
 end
 
 local function load_project(num)
-  saved_data = tab.load("/home/we/dust/data/bedtime/takt-pat-"..num ..".data")
+  saved_data = tab.load(_path.dust .. "takt/data/takt-pat-"..num ..".data")
   if saved_data ~= nil then
     data = saved_data
     pattern = data.lastpattern
-    params:read("bedtime/takt-param-"..num  .. ".pset")
+    params:read(_path.dust .. "takt/data/takt-param-"..num  .. ".pset")
     params:set("bpm", data[pattern].bpm) -- load bpm
     for v=1,VOICES do -- set loop points
       set_loop(v,data[pattern].startpos[v],data[pattern].seqlen[v])
@@ -707,7 +710,7 @@ function key(n, z)
       if enc_line == 0 then
         loadchannel = disptrack
         filesel = true
-        fileselect.enter("/home/we/dust/audio", load_sample)
+        fileselect.enter(_path.audio, load_sample)
       else
         disptrack = disptrack + 1
         filesel = false
