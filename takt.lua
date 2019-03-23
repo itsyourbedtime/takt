@@ -128,21 +128,21 @@ local function set_loop(tr,startp,seql)
 end
 
 local function save_project(num)
-  if util.file_exists(_path.dust .. "takt/data") == false then
-    util.make_dir(_path.dust .. "takt/data")
+  if util.file_exists(_path.data .. "takt/") == false then
+    util.make_dir(_path.data .. "takt/")
   end
   data[pattern].bpm = params:get("bpm")
   data.lastpattern = pattern
-  tab.save(data,_path.dust .. "takt/data/takt-pat-"..num ..".data")
-  params:write(_path.dust .. "takt/data/takt-param-"..num ..".pset")
+  tab.save(data,_path.data .. "takt/takt-pat-"..num ..".data")
+  params:write(_path.data .. "takt/takt-param-"..num ..".pset")
 end
 
 local function load_project(num)
-  saved_data = tab.load(_path.dust .. "takt/data/takt-pat-"..num ..".data")
+  saved_data = tab.load(_path.data .. "takt/takt-pat-"..num ..".data")
   if saved_data ~= nil then
     data = saved_data
     pattern = data.lastpattern
-    params:read(_path.dust .. "takt/data/takt-param-"..num  .. ".pset")
+    params:read(_path.data .. "takt/takt-param-"..num  .. ".pset")
     params:set("bpm", data[pattern].bpm) -- load bpm
     for v=1,VOICES do -- set loop points
       set_loop(v,data[pattern].startpos[v],data[pattern].seqlen[v])
