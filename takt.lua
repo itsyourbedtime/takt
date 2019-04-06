@@ -20,7 +20,7 @@
 --
 
 engine.name = 'Ack'
-local Ack = require "/ack/lib/ack"
+local Ack = require "ack/lib/ack"
 local beatclock = require 'beatclock'
 local tab = require 'tabutil'
 local fileselect = require 'fileselect'
