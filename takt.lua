@@ -24,6 +24,8 @@ local Ack = require "ack/lib/ack"
 local beatclock = require 'beatclock'
 local tab = require 'tabutil'
 local fileselect = require 'fileselect'
+local textentry = require "textentry"
+
 
 data = {}
 
