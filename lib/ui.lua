@@ -422,7 +422,7 @@ function ui.tile(index, name, value, ui_index, lock)
   
   
   screen.level(lvl)
-  if (index == 3 or index == 4) and type(value) == 'number' then value = util.round(value / 10000, value % 1 == 0 and 1 or 0.1) end
+  if (index == 3 or index == 4) and type(value) == 'number' then value = util.round(value / 10000, 0.1) end
   if type(value) == 'number' then value = util.round(value, value % 1 == 0 and 1 or 0.1) end
   
   
@@ -516,7 +516,7 @@ local function draw_reel(x, y, reverse)
     l = reverse and 5 or 1
   end
   screen.level(2)
-  screen.line_width(1.5)
+  screen.line_width(1.2)
   
   local pos = { 1, 3, 5}
   
@@ -537,77 +537,7 @@ local function draw_reel(x, y, reverse)
   screen.circle(x + 65, y + 5, 11)
   screen.stroke()
   
---[[  screen.level(1)
-  screen.circle(x + 5, y + 28, 2)
-  screen.fill()
-  screen.circle(x + 55, y + 28, 2)
-  screen.fill()
-  screen.level(0)
-  screen.circle(x + 5, y + 28, 1)
-  screen.circle(x + 55, y + 28, 1)
-  screen.fill()
-  --right reel
-  screen.level(1)
-  screen.circle(x + 65, y, 1)
-  screen.stroke()
-  screen.circle(x + 65, y, 20)
-  screen.stroke()
-  screen.circle(x + 65, y, 3)
-  screen.stroke()
-  -- left
-  screen.circle(x, y, 20)
-  screen.stroke()
-  screen.circle(x, y, 1)
-  screen.stroke()
-  screen.circle(x, y, 3)
-  screen.stroke()
-  -- tape
-  if mounted then
-    local x1, x2, x3
-    screen.level(6)
-    if not flutter.on or (flutter.on and not playing) then
-      x1 = x + 65
-      x2 = x + 65
-      x3 = x + 70
-    elseif (flutter.on and playing) then
-      x1 =  x + 65 - math.random(0, 5)
-      x2 =  x + 65 - math.random(0, 10)
-      x3 =  x + 70 - math.random(0, 5)
-    end
-    screen.move(x, y - 17)
-    screen.curve(x1, y - 12, x2, y - 12, x3, y - 12)
-    screen.stroke()
-    screen.level(6)
-    screen.circle(x, y, 18)
-    screen.stroke()
-    screen.level(3)
-    screen.circle(x, y, 17)
-    screen.stroke()
-    screen.level(6)
-    screen.circle(x + 65, y, 14)
-    screen.stroke()
-    screen.level(3)
-    screen.circle(x + 65, y, 13)
-    screen.stroke()
-    screen.level(6)
-
-    screen.move(x + 75, y + 10)
-    screen.line(x + 55, y + 30)
-    screen.stroke()
-    screen.move(x - 9, y + 16)
-    screen.line(x + 5, y + 30)
-    screen.curve(x + 5, y + 30, x + 5, y + 30, x + 5, y + 30)
-    screen.stroke()
-    screen.move(x + 5, y + 30)
-    screen.curve(x + 40, y + ui.tape.tension, x + 25, y + ui.tape.tension, x + 56, y + 30)
-    screen.stroke()
-  end
-  -- playhead
-  screen.level(ui.playhead.brightness)
-  screen.circle(x + 32, y + ui.playhead.height + 1, 3)
-  screen.rect(x + 28, y + ui.playhead.height, 8, 4)
-  screen.fill()
-]]end
+end
 
 
 local function tile_x(x)

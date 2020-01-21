@@ -521,18 +521,16 @@ local step_params = {
   [3] = function(tr, s, d) -- start
       local sample = data[data.pattern][tr].params[s].sample
       local start = params:get("start_frame_" .. sample)
-      local length = params:get("end_frame_" .. sample)
-      data[data.pattern][tr].params[s].start = util.clamp(data[data.pattern][tr].params[s].start + ((d) * 10000), 0,  data.settings[sample].length or length)
+      local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval -- params:get("end_frame_" .. sample)
+      data[data.pattern][tr].params[s].start = util.clamp(data[data.pattern][tr].params[s].start + ((d) * 1000), 0,  length)
   end,
-  [4] = function(tr, s, d) -- mode
+  [4] = function(tr, s, d) -- len
       local sample = data[data.pattern][tr].params[s].sample
       local start = params:get("start_frame_" .. sample)
-      local length = params:get("end_frame_" .. sample)
+      
+      local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval -- params:get("end_frame_" .. sample)
+      data[data.pattern][tr].params[s].s_end = util.clamp(data[data.pattern][tr].params[s].s_end + ((d) * 1000), 0, length)
 
-      if data.settings[sample].length == nil then data.settings[sample].length = length  end
-      
-      data[data.pattern][tr].params[s].s_end = util.clamp(data[data.pattern][tr].params[s].s_end + ((d) * 10000), 0, data.settings[sample].length)
-      
    end,
   [5] = function(tr, s, d) -- freq mod lfo 1 freq_lfo1
         data[data.pattern][tr].params[s].freq_lfo1 = util.clamp(data[data.pattern][tr].params[s].freq_lfo1 + d / 100, 0, 1)
@@ -542,7 +540,7 @@ local step_params = {
 
   end,
   [7] = function(tr, s, d) -- volume
-        data[data.pattern][tr].params[s].vol = util.clamp(data[data.pattern][tr].params[s].vol + d  , -48, 16)
+        data[data.pattern][tr].params[s].vol = util.clamp(data[data.pattern][tr].params[s].vol + d / 10  , -48, 16)
   end,
   [8] = function(tr, s, d) -- pan
         data[data.pattern][tr].params[s].pan = util.clamp(data[data.pattern][tr].params[s].pan + d / 10 , -1, 1)
