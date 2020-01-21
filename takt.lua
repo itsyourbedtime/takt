@@ -521,14 +521,14 @@ local step_params = {
   [3] = function(tr, s, d) -- start
       local sample = data[data.pattern][tr].params[s].sample
       local start = params:get("start_frame_" .. sample)
-      local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval -- params:get("end_frame_" .. sample)
+      local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval 
       data[data.pattern][tr].params[s].start = util.clamp(data[data.pattern][tr].params[s].start + ((d) * 1000), 0,  length)
   end,
   [4] = function(tr, s, d) -- len
       local sample = data[data.pattern][tr].params[s].sample
       local start = params:get("start_frame_" .. sample)
       
-      local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval -- params:get("end_frame_" .. sample)
+      local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval 
       data[data.pattern][tr].params[s].s_end = util.clamp(data[data.pattern][tr].params[s].s_end + ((d) * 1000), 0, length)
 
    end,

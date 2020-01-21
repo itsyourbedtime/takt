@@ -1,10 +1,9 @@
 -- 
--- engines 
+-- engines
 -- @its_your_bedtime
 --
 
-local os = require('os')
-local n_engine = {}
+local engines = {}
 local NUM_SAMPLES = 100 
 local playing = false
 local recording = false
@@ -19,16 +18,16 @@ function unrequire(name)
   _G[name] = nil
 end
 
-unrequire("timber/lib/timber_engine")
-local Timber = include("timber/lib/timber_engine")
-engine.name = "Timber"
+unrequire("lib/timber_takt_engine")
+local Timber = include("lib/timber_takt_engine")
+engine.name = "Timber_Takt"
 
-n_engine.set_bpm = function(bpm)
+engines.set_bpm = function(bpm)
     Timber.set_bpm(bpm)
 end
 
 
-function n_engine.load_folder(file, add)
+function engines.load_folder(file, add)
   
   local sample_id = 0
   if add then
@@ -68,7 +67,7 @@ function n_engine.load_folder(file, add)
   end
 end
 
-n_engine.phase = function(t, x)
+engines.phase = function(t, x)
   --if playing then 
     position = x 
     
@@ -90,20 +89,20 @@ n_engine.phase = function(t, x)
 end
 
 
-function n_engine.get_pos()
+function engines.get_pos()
     return position
 end
 
-function n_engine.get_len()
+function engines.get_len()
     return length
 end
 
-function n_engine.get_state()
+function engines.get_state()
     return recording or playing and true or false
 end
 
 
-function n_engine.init()
+function engines.init()
   -- timbers
   wait_metro = metro.init()
   wait_metro.time = 1
@@ -111,7 +110,7 @@ function n_engine.init()
 
   params:add_trigger('load_f','+ Load Folder')
   params:set_action('load_f', function() Timber.FileSelect.enter(_path.audio, function(file)
-  if file ~= "cancel" then n_engine.load_folder(file, add) end end) end)
+  if file ~= "cancel" then engines.load_folder(file, add) end end) end)
 
   Timber.options.PLAY_MODE_BUFFER_DEFAULT = 3
   Timber.options.PLAY_MODE_STREAMING_DEFAULT = 3
@@ -159,12 +158,12 @@ function n_engine.init()
   end
 
   softcut.phase_quant(1, .01)
-  softcut.event_phase(n_engine.phase)
+  softcut.event_phase(engines.phase)
 
 end
 
 
-function n_engine.set_mode(mode)
+function engines.set_mode(mode)
   if mode == 1 then -- stereo
   -- set softcut to stereo inputs
     softcut.level_input_cut(1, 1, 1)
@@ -193,7 +192,7 @@ function n_engine.set_mode(mode)
   end
 end
 
-function n_engine.set_source(src)
+function engines.set_source(src)
   if src == 1 then -- ext
     audio.level_adc_cut(1)
     audio.level_eng_cut(0)
@@ -204,11 +203,11 @@ function n_engine.set_source(src)
 end
 
 
-function n_engine.rec(state)
+function engines.rec(state)
   recording = state
   for i = 1, 2 do
     if state then
-        n_engine.clear()
+        engines.clear()
        recording = true
        softcut.poll_start_phase()
           --softcut.position(i, 0)
@@ -224,7 +223,7 @@ function n_engine.rec(state)
 end
 
 
-function n_engine.play(state)
+function engines.play(state)
   for i = 1, 2 do
     if state then
        playing = true
@@ -241,7 +240,7 @@ function n_engine.play(state)
 end
 
 
-function n_engine.set_start(x)
+function engines.set_start(x)
   start = x
   for i = 1, 2 do
     softcut.loop_start(i, x)
@@ -249,7 +248,7 @@ function n_engine.set_start(x)
 end
 
 
-function n_engine.set_length(x)
+function engines.set_length(x)
   length = x
   for i = 1, 2 do
     softcut.loop_end(i, x)
@@ -257,7 +256,7 @@ function n_engine.set_length(x)
 end
 
 
-function n_engine.clear()
+function engines.clear()
   start = 0
   length = 60
   position = 0
@@ -269,7 +268,7 @@ function n_engine.clear()
 end
 
 
-function n_engine.save_and_load(slot)
+function engines.save_and_load(slot)
   
   local PATH = _path.audio .. 'takt/'
   if not util.file_exists(PATH) then util.make_dir(PATH) end
@@ -290,7 +289,7 @@ function n_engine.save_and_load(slot)
     --print('saved')
     Timber.load_sample(slot, PATH .. name)
     params:set('play_mode_' .. slot, 3)
-    n_engine.clear()
+    engines.clear()
   end
     
   wait_metro:start()
@@ -298,4 +297,4 @@ function n_engine.save_and_load(slot)
 end
 
 
-return n_engine
+return engines
