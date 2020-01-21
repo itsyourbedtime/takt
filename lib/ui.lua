@@ -273,7 +273,7 @@ function ui.draw_mode(x, y, mode, index)
     screen.text('MODE')
     screen.stroke()
     screen.level(0)
-    if mode == 0 then -- rev
+--[[    if mode == 0 then -- rev
       
       screen.move(x + 2, y - 2)
       screen.line(x + 11, y - 2)
@@ -283,9 +283,9 @@ function ui.draw_mode(x, y, mode, index)
       screen.line(x + 1, y - 2)
       screen.move(x + 4, y  )
       screen.line(x + 1, y - 3)
+]]      
       
-      
-    --[[elseif mode == 1 then -- loop
+  if mode == 1 then -- loop
       
       screen.move(x + 2, y)
       screen.line(x + 4, y)
@@ -344,7 +344,7 @@ function ui.draw_mode(x, y, mode, index)
       screen.line(x + 6, y - 6)
       screen.move(x + 6, y + 1)
       screen.line(x + 10, y + 1)
-      ]]
+    
     elseif mode == 1 then -- oneshot
     
       screen.move(x + 1, y - 2)

@@ -195,7 +195,7 @@ end
 
 function n_engine.set_source(src)
   if src == 1 then -- ext
-     audio.level_adc_cut(1)
+    audio.level_adc_cut(1)
     audio.level_eng_cut(0)
   elseif src == 2 then -- int
     audio.level_adc_cut(0)
@@ -208,6 +208,7 @@ function n_engine.rec(state)
   recording = state
   for i = 1, 2 do
     if state then
+        n_engine.clear()
        recording = true
        softcut.poll_start_phase()
           --softcut.position(i, 0)
@@ -274,7 +275,7 @@ function n_engine.save_and_load(slot)
   if not util.file_exists(PATH) then util.make_dir(PATH) end
   local name = 'sample_' ..  #util.scandir(PATH)
     
-  print(mode)
+  --print(mode)
   if mode == 1 or mode == 2 then
     softcut.buffer_write_stereo (PATH .. name, start, length)
   elseif mode == 3 then
@@ -286,7 +287,7 @@ function n_engine.save_and_load(slot)
 
 
   wait_metro.event = function(stage)
-    print('saved')
+    --print('saved')
     Timber.load_sample(slot, PATH .. name)
     params:set('play_mode_' .. slot, 3)
     n_engine.clear()
