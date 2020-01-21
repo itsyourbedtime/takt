@@ -137,7 +137,7 @@ local function set_view(x)
 end
 
 local function reset_params(tr, step, replace)
-    data[data.pattern][tr].params[step][k] = data[data.pattern][tr].params['TR'.. tr]
+    data[data.pattern][tr].params[step] = data[data.pattern][tr].params['TR'.. tr]
 end
 
 
