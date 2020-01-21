@@ -72,7 +72,7 @@ n_engine.phase = function(t, x)
   --if playing then 
     position = x 
     
---[[    if position == length then
+    if position == length then
       position = start
       for i = 1, 2 do 
         softcut.position(i, start)
@@ -83,7 +83,7 @@ n_engine.phase = function(t, x)
       playing = false
       recording = false
     end
-]]  --end
+  --end
   --if recording then 
     --position = x
   --end
@@ -107,7 +107,7 @@ function n_engine.init()
   -- timbers
   wait_metro = metro.init()
   wait_metro.time = 1
-  wait_metro.count = 0
+  wait_metro.count = 1
 
   params:add_trigger('load_f','+ Load Folder')
   params:set_action('load_f', function() Timber.FileSelect.enter(_path.audio, function(file)
@@ -129,8 +129,8 @@ function n_engine.init()
     --params:set('amp_env_sustain_' .. i, 0)
   end
   -- softcut 
-  audio.level_cut(1)
-  audio.level_adc_cut(0.9)
+  audio.level_cut(0.5)
+  audio.level_adc_cut(1)
   audio.level_eng_cut(0)
   softcut.level_input_cut(1, 1, 1)
   softcut.level_input_cut(2, 1, 0)
@@ -195,7 +195,7 @@ end
 
 function n_engine.set_source(src)
   if src == 1 then -- ext
-     audio.level_adc_cut(0.9)
+     audio.level_adc_cut(1)
     audio.level_eng_cut(0)
   elseif src == 2 then -- int
     audio.level_adc_cut(0)
@@ -273,7 +273,8 @@ function n_engine.save_and_load(slot)
   local PATH = _path.audio .. 'takt/'
   if not util.file_exists(PATH) then util.make_dir(PATH) end
   local name = 'sample_' ..  #util.scandir(PATH)
-  
+    
+  print(mode)
   if mode == 1 or mode == 2 then
     softcut.buffer_write_stereo (PATH .. name, start, length)
   elseif mode == 3 then
@@ -285,13 +286,14 @@ function n_engine.save_and_load(slot)
 
 
   wait_metro.event = function(stage)
+    print('saved')
     Timber.load_sample(slot, PATH .. name)
-    params:set('play_mode_' .. slot, 4)
+    params:set('play_mode_' .. slot, 3)
+    n_engine.clear()
   end
     
   wait_metro:start()
   
-  n_engine.clear()
 end
 
 
