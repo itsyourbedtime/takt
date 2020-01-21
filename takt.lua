@@ -188,7 +188,7 @@ local function get_params(tr, step, lock)
         res.default = data[data.pattern][tr].params['TR' .. tr]
 
       end
-      return res
+      return data[data.pattern][tr].params[step] -- res
     end
 end
 
