@@ -141,16 +141,19 @@ local function reset_params(tr, step, replace)
 end
 
 
-local function sync_tracks()
-  for i=1, 7 do
-    data[data.pattern].track.pos[i] = counter
-  end
+local function sync_tracks(tr)
+    for i=1, 7 do
+      if data[data.pattern].track.div[i] == data[data.pattern].track.div[tr] then
+        data[data.pattern].track.pos[tr] = data[data.pattern].track.pos[i]
+      end
+    end
+  
 end
 
 local function set_loop(tr, start, len)
   --print(tr,start, len)-- get_step(len) * 16)
   if start == 1 and len == 16 then
-    sync_tracks()
+    sync_tracks(tr)
   end
     data[data.pattern].track.start[tr] = get_step(start)-- (start * 16) - 15
     data[data.pattern].track.len[tr] = get_step(len) + 15
@@ -494,7 +497,7 @@ local step_params = {
   end,
   [-3] = function(tr, s, d) -- rnd
       data[data.pattern].track.div[tr] = util.clamp(data[data.pattern].track.div[tr] + d, 1, 16)
-      sync_tracks()
+      sync_tracks(tr)
   end,
   [-2] = function(tr, s, d) -- rule
       data[data.pattern][tr].params[s].rule = util.clamp(data[data.pattern][tr].params[s].rule + d, 0, 16)
@@ -749,7 +752,7 @@ function g.key(x, y, z)
             end
           else
             data[data.pattern].track.div[y] = x
-            sync_tracks()
+            sync_tracks(y)
           end
         end
         
