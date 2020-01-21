@@ -1,4 +1,4 @@
--- takt
+-- takt v2
 -- @its_your_bedtime
 --
 -- parameter locking sequencer
@@ -13,11 +13,7 @@ local textentry = require('textentry')
 local midi_clock
 local hold_time = 0
 local down_time = 0
-local offset = 0
-local retrig = 0
-local strack = 1
-local counter = 0
-local mstep = 0
+
 local blink = 1
 local ALT, SHIFT, MOD = false, false, false
 local hold, holdmax, first, second = {}, {}, {}, {}
@@ -74,7 +70,7 @@ local rule = {
 
 local function set_bpm(n)
     data[data.pattern].bpm = n
-    sequencer_metro.time = 60 / data[data.pattern].bpm --[[bpm]] / 16 --[[ppqn]] / 4 --params:get("beats_per_data.pattern")
+    sequencer_metro.time = 60 / data[data.pattern].bpm  / 16 --[[ppqn]] / 4 
     engines.set_bpm(data[data.pattern].bpm)
     midi_clock:bpm_change(data[data.pattern].bpm)
 end
@@ -117,16 +113,13 @@ end
 local function get_substep(tr, step)
     for s = (step*16) - 15, (step*16) + 15 do
       if data[data.pattern][tr][s] == 1 then
-        --return { s, data[data.pattern][tr][s] }
         return true
       end
-      --data[data.pattern][tr][s][1] = (s == t) and 1 or 0
     end
 end
 
 local function set_view(x)
-    data.ui_index = 1 --x =='sampling' and 7 or 1
-    
+    data.ui_index = 1 
     for k, v in pairs(view) do
       if k == x then
         view[k] = true
@@ -136,28 +129,20 @@ local function set_view(x)
     end
 end
 
-local function reset_params(tr, step, replace)
-    data[data.pattern][tr].params[step] = data[data.pattern][tr].params['TR'.. tr]
-end
-
-
 local function sync_tracks(tr)
     for i=1, 7 do
       if data[data.pattern].track.div[i] == data[data.pattern].track.div[tr] then
         data[data.pattern].track.pos[tr] = data[data.pattern].track.pos[i]
       end
     end
-  
 end
 
 local function set_loop(tr, start, len)
-  --print(tr,start, len)-- get_step(len) * 16)
   if start == 1 and len == 16 then
     sync_tracks(tr)
   end
-    data[data.pattern].track.start[tr] = get_step(start)-- (start * 16) - 15
+    data[data.pattern].track.start[tr] = get_step(start)
     data[data.pattern].track.len[tr] = get_step(len) + 15
-  
 end
 
 local function simplecopy(obj)
@@ -175,8 +160,6 @@ local function copy_step(src, dst)
     end
     
     data[data.pattern][dst[1]].params[dst[2]] = data[data.pattern][src[1]].params[src[2]]
-    
-    --data[data.pattern][dst[1]].params[dst[2]]  = simplecopy(data[data.pattern][src[1]].params[src[2]])
 end
 
 local function get_params(tr, step, lock)
@@ -214,17 +197,14 @@ local function open_sample_settings()
     norns.menu.toggle(true)
     _norns.enc(1, 100)
     _norns.enc(2,-9999999)
-    _norns.enc(2, 25 +(data[data.pattern][data.selected[1]].params[p].sample * 104))
+    _norns.enc(2, 25 +(data[data.pattern][data.selected[1]].params[p].sample * 94))
 end
 
 local function choke_group(tr, step)
-  local last = choke[tr]
-
-  if data[data.pattern][tr].params[step].lock and data[data.pattern][tr].params[step].playing then
-    
-    engine.noteOff(last)
-  
-  end
+    local last = choke[tr]
+    if data[data.pattern][tr].params[step].lock and data[data.pattern][tr].params[step].playing then
+      engine.noteOff(last)
+    end
 end
 
 local function set_locks(step_param)
@@ -250,17 +230,14 @@ local function set_locks(step_param)
                 ['release'] = "amp_env_release",
               }
 
-          for k, v in pairs(step_param) do
-            if param_ids[k] ~= nil then
-              local old = params:get(param_ids[k]  .. '_' .. step_param.sample, v)
-              --print('setting '..param_ids[k].. '_' .. step_param.sample .. ' to '..v .. ' was ' .. old)
-              params:set(param_ids[k]  .. '_' .. step_param.sample, v)
-            end
-          end
+    for k, v in pairs(step_param) do
+      if param_ids[k] ~= nil then
+        params:set(param_ids[k]  .. '_' .. step_param.sample, v)
+      end
+    end
 end
 
 local function seqrun(counter)
-  --counter = counter < 16 * 16 and counter + 1 or 1
 
   for tr = 1, 7 do
 
@@ -286,7 +263,7 @@ local function seqrun(counter)
             step_param = get_params(tr, data[data.pattern].track.p_pos[tr])
             set_locks(step_param)
            else
-            step_param = get_params(tr)--, 'TR'..tr)
+            step_param = get_params(tr)
             set_locks(step_param)
           end
           
@@ -294,20 +271,17 @@ local function seqrun(counter)
           if step_param.rule ~= 0 then
             play = rule[step_param.rule][2](tr, data[data.pattern].track.p_pos[tr]) 
             data[data.pattern][tr].params[data[data.pattern].track.p_pos[tr]].playing = play
-            --print('PLAY RULE - ' .. (play and 'PLAYING' or 'NAH'))
           end
           
           
           local play = data[data.pattern][tr].params[data[data.pattern].track.p_pos[tr]].playing
           
           if play then 
-            --handle_rev_triggers(tr, step_param)
             choke_group(tr, data[data.pattern].track.p_pos[tr])
             engine.noteOn(step_param.sample, music.note_num_to_freq(step_param.note), 1, step_param.sample) 
             choke[tr] = step_param.sample
           end
-        end
-
+       end
     end
   end
   
@@ -448,16 +422,15 @@ function init()
 
       for k = 1, 16 do
         data[t][l].params[k] = {}
-      setmetatable(data[t][l].params[k], {__index =  data[t][l].params['TR'..l]})
+       setmetatable(data[t][l].params[k], {__index =  data[t][l].params['TR'..l]})
       end
     
     end
   end
   
-    for i = 0, 99 do data.settings[i] = { length = nil, rev = false } end
 
     sequencer_metro = metro.init()
-    sequencer_metro.time = 60 / data[data.pattern].bpm --[[bpm]] / 16 --[[ppqn]] / 4 --params:get("beats_per_data.pattern")
+    sequencer_metro.time = 60 / data[data.pattern].bpm  / 16 --[[ppqn]] / 4 
     sequencer_metro.event = function(stage) seqrun(stage) end
 
     redraw_metro = metro.init(function(stage) redraw() g:redraw() blink = (blink + 1) % 17 end, 1/30)
@@ -591,9 +564,9 @@ local step_params = {
 function enc(n,d)
   norns.encoders.set_sens(1,2)
   norns.encoders.set_sens(2,2)
-  norns.encoders.set_accel(1, false)-- not mainmenu and true or false)
-  norns.encoders.set_accel(2, false)-- not mainmenu and true or false)
-  norns.encoders.set_accel(3, false)-- not mainmenu and true or false)
+  norns.encoders.set_accel(1, false)
+  norns.encoders.set_accel(2, false)
+  norns.encoders.set_accel(3, false)
 
   local tr = data.selected[1]
   local s = data.selected[2] and data.selected[2] or 'TR' .. data.selected[1]
@@ -668,9 +641,7 @@ function key(n,z)
 end
 
 function redraw()
-  local pos = util.round( counter / 16 )
-  
-  --local src = is_lock()
+
   local tr = data.selected[1]
   local params_data = get_params(data.selected[1])
 
@@ -684,8 +655,8 @@ function redraw()
 
   screen.clear()
   
-  ui.head(params_data, data, view)-- , data.pattern, data.selected, data[data.pattern].track, data, data.ui_index)
-  --if view.steps_engine then ui.sample_screen(params_data, data) end
+  ui.head(params_data, data, view)
+  
   if view.sampling then 
     ui.sampling(params_data, data, engines.get_pos(), engines.get_len(), engines.get_state()) 
   else
@@ -766,7 +737,6 @@ function g.key(x, y, z)
       elseif MOD then
         if not copy[1] then 
           copy = { y, x }
-          --tab.print(copy)
         else
           copy_step(copy, {y, x})
         end
@@ -779,9 +749,7 @@ function g.key(x, y, z)
        if z == 1 then
         
           down_time = util.time()
-          --if not cond then
-            --reset_params(y, x)
-          --end
+
         else
           
           hold_time = util.time() - down_time
@@ -793,10 +761,12 @@ function g.key(x, y, z)
 
           elseif cond and not held then
 
-            --data[data.pattern][y].params[x].lock = false
 
             clear_substeps(y, x)
-            data[data.pattern][y].params[x] = data[data.pattern][y].params['TR'..y]
+            
+            data[data.pattern][y].params[x] = {}
+            setmetatable(data[data.pattern][y].params[x], {__index =  data[data.pattern][y].params['TR'..y]})
+       
             data.selected = { y, false }
     
           end

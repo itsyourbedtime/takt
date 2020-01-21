@@ -18,8 +18,8 @@ function unrequire(name)
   _G[name] = nil
 end
 
-unrequire("lib/timber_takt_engine")
-local Timber = include("lib/timber_takt_engine")
+unrequire("lib/timber_takt")
+local Timber = include("lib/timber_takt")
 engine.name = "Timber_Takt"
 
 engines.set_bpm = function(bpm)
@@ -117,15 +117,10 @@ function engines.init()
   params:add_separator()
   Timber.add_params()
   for i = 0, NUM_SAMPLES - 1 do
-    local extra_params = {
-      {type = "option", id = "launch_mode_" .. i, name = "Launch Mode", options = {"Gate", "Toggle"}, default = 1, action = function(value)
-        Timber.setup_params_dirty = true
-      end},
-    }
+
     params:add_separator()
-    Timber.add_sample_params(i, true, extra_params)
-    --params:set('play_mode_' .. i, 4)
-    --params:set('amp_env_sustain_' .. i, 0)
+    Timber.add_sample_params(i, true) 
+    
   end
   -- softcut 
   audio.level_cut(0.5)

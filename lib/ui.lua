@@ -1,3 +1,5 @@
+-- takt ui @its_your_bedtime
+
 local ui = {
 
     reel = {
@@ -273,18 +275,7 @@ function ui.draw_mode(x, y, mode, index)
     screen.text('MODE')
     screen.stroke()
     screen.level(0)
---[[    if mode == 0 then -- rev
-      
-      screen.move(x + 2, y - 2)
-      screen.line(x + 11, y - 2)
-      
-      
-      screen.move(x + 4, y - 5)
-      screen.line(x + 1, y - 2)
-      screen.move(x + 4, y  )
-      screen.line(x + 1, y - 3)
-]]      
-      
+
   if mode == 1 then -- loop
       
       screen.move(x + 2, y)
@@ -359,11 +350,11 @@ function ui.draw_mode(x, y, mode, index)
 end
 
 
-function ui.draw_note(x, y, params_data, ui_index, count)
+function ui.draw_note(x, y, params_data, ui_index, count, lock)
   set_brightness(count and count or 2, ui_index)
   screen.rect(x,  y, 20, 17)
   screen.fill()
-  -- note icon
+
   local offset = 0
   if count then offset = 2 end
   
@@ -377,8 +368,6 @@ function ui.draw_note(x, y, params_data, ui_index, count)
   
   local note_name
   if count then
-    --tab.print(params_data)
-    --print(count)
     note_name = params_data['note_' .. count]
   else
     note_name = params_data.note
@@ -391,6 +380,10 @@ function ui.draw_note(x, y, params_data, ui_index, count)
     screen.text(count)
     screen.stroke()
   end
+  
+  local lvl = lock == true and 15 or 0 --
+
+  screen.level(lvl)
   screen.move(x + 9, y + 15)
   screen.text_center(oct ..  music.note_num_to_name(note_name):gsub('♯', '#'))
   screen.stroke()
@@ -404,9 +397,7 @@ function ui.tile(index, name, value, ui_index, lock)
           or (index == 13 or index == 14) and (21 * index) - 188
           or index > 6 and (21 * index) - 146
           or (21 * index) - 20
-
-  
-  
+          
   local y = index > 14 and 44 or index > 6 and 26 or 8
   local x_ext =  index == 4 and 6 or index == 3 and 2 or 0
   
@@ -456,51 +447,44 @@ function ui.sample_screen(params_data, data)
   
     local tile = { 
       {1, 'SMP',  params_data.sample },
-      {2, 'NOTE', function() ui.draw_note(22, 8, params_data, data.ui_index) end },
+      {2, 'NOTE', function(_, _, lock) ui.draw_note(22, 8, params_data, data.ui_index, false, lock) end },
       {3, 'STRT', params_data.start },
       {4, 'END',   params_data.s_end }, -- function() ui.draw_mode(67, 23, params_data.rev, data.ui_index) end },
       {5, 'LFO1', params_data.freq_lfo1 },
       {6, 'LFO2', params_data.freq_lfo2 },
       {7, 'VOL', params_data.vol },
       {8, 'PAN', params_data.pan },
-      {9, 'ENV', function()  ui.draw_env(45, 42, 'AMP', params_data, data.ui_index) end },
+      {9, 'ENV', function(lock)  ui.draw_env(45, 42, 'AMP', params_data, data.ui_index) end },
       {13, 'LFO1', params_data.amp_lfo1 },
       {14, 'LFO2', params_data.amp_lfo2 },
       {15, 'SR', sr_types[params_data.sr] },
       {16, 'TYPE', f_types[params_data.ftype] },
-      {17, 'FILTER', function() ui.draw_filter(45, 60, params_data, data.ui_index) end },
+      {17, 'FILTER', function(lock) ui.draw_filter(45, 60, params_data, data.ui_index) end },
       {19, 'LFO1', params_data.cut_lfo1 },
       {20, 'LFO2', params_data.cut_lfo2 },
 
 }
    for k, v in pairs(tile) do
-      if v[3] and type(v[3]) == 'function' then
-        v[3](v[1], v[2])
-      elseif v[3] then
-        
         
         local lock = false
-
         if params_data.default then
           if v[2] == 'SR' then
              lock = sr_types[params_data.default[name_lookup[v[2]]]] ~= v[3] and true or false
           elseif v[2] == 'TYPE' then
             lock = f_types[params_data.default[name_lookup[v[2]]]] ~= v[3] and true or false
           else
-            lock = params_data.default[name_lookup[v[2]]] ~= v[3]  and true or false
+            lock = params_data.default[name_lookup[v[2]]] ~= params_data[name_lookup[v[2]]]  and true or false
           end
         end
-          
+        
+        
+      if v[3] and type(v[3]) == 'function' then
+        v[3](v[1], v[2], lock)
+      elseif v[3] then
         ui.tile(v[1], v[2], v[3], data.ui_index, lock or false)
       end
     end
- 
 end
-
-
-
-
-
 
 local function draw_reel(x, y, reverse)
   local flutter = ui.tape.flutter
@@ -556,7 +540,7 @@ function ui.sampling(params_data, data, pos, len, active)
   
   screen.rect(tile_x(4), 8,  20, 17)
   screen.fill()
-  screen.level(0) --- disp lock
+  screen.level(0) 
   screen.move( tile_x(4)  + 10, 8 + 7)
   screen.text_center('MODE')
   screen.move( tile_x(4)  + 10, 8 + 15)
@@ -565,7 +549,7 @@ function ui.sampling(params_data, data, pos, len, active)
   set_brightness(0, data.ui_index)
   screen.rect(tile_x(5) , 8,  20, 17)
   screen.fill()
-  screen.level(0) --- disp lock
+  screen.level(0) 
   screen.move( tile_x(5)  + 10, 8 + 7)
   screen.text_center('SRC')
   screen.move( tile_x(5) + 10, 8 + 15)
@@ -578,8 +562,7 @@ function ui.sampling(params_data, data, pos, len, active)
   screen.fill()
   
 
-  screen.level(0) --- disp lock
-  --screen.line_width(2)
+  screen.level(0) 
   
   screen.circle( tile_x(0)  + 10, 26 + 9, 4.5)
   if data.sampling.rec then
@@ -589,14 +572,13 @@ function ui.sampling(params_data, data, pos, len, active)
     screen.circle( tile_x(0)  + 10, 26 + 9, 4.5)
     screen.stroke() 
   end
-  --screen.text_center('REC')
+
 
   set_brightness(2, data.ui_index)
   screen.rect( tile_x(1) , 26,  20, 17)
   screen.fill()
-  screen.level(0) --- disp lock
-  --screen.move( tile_x(1)  + 10, 26 + 10)
-  --screen.text_center('PLAY')
+  screen.level(0) 
+  
   screen.move(tile_x(1) + 7, 31)
   screen.line(tile_x(1) + 7 + 8, 31 + 8 * 0.5)
   screen.line(tile_x(1) + 7, 31 + 8)
@@ -610,11 +592,7 @@ function ui.sampling(params_data, data, pos, len, active)
   set_brightness(3, data.ui_index)
   screen.rect( tile_x(2) , 26,  20, 17)
   screen.fill()
-  screen.level(0) --- disp lock
-  --screen.move( tile_x(2)  + 10, 26 + 7)
-  --screen.text_center('SAVE')
-  --screen.move( tile_x(2) + 10, 26 + 15)
-  --screen.text_center(data.sampling.slot)
+  screen.level(0) 
   
   screen.rect( tile_x(2) + 5, 26 + 3, 12, 12)
   screen.stroke()
@@ -622,10 +600,6 @@ function ui.sampling(params_data, data, pos, len, active)
   
   screen.rect( tile_x(2) + 16, 26 + 2,1,1)
   screen.fill()
-  
-  --set_brightness(3, data.ui_index)
-  --screen.rect( tile_x(2) + 6, 26 + 2,8,5)
-  --screen.fill()
 
   screen.level(0)  
   screen.rect( tile_x(2) + 7, 26 + 3,8,4)
@@ -637,9 +611,6 @@ function ui.sampling(params_data, data, pos, len, active)
   screen.move( tile_x(2) + 10, 26 + 13)
   screen.text_center(data.sampling.slot)
   
-  
-
-
   set_brightness(4, data.ui_index)
   screen.rect( tile_x(0) , 44,  20, 17)
   screen.fill()
@@ -661,12 +632,7 @@ function ui.sampling(params_data, data, pos, len, active)
   set_brightness(6, data.ui_index)
   screen.rect( tile_x(2) , 44,  20, 17)
   screen.fill()
-  screen.level(0) --- disp lock
---[[  screen.move( tile_x(2)  + 10, 44 + 7)
-  screen.text_center('CLR')
-  screen.move( tile_x(2) + 10, 44 + 15)
-  screen.text_center('')
-  ]]
+  screen.level(0)
   
   screen.move( tile_x(2) + 10, 44 + 15)
   screen.rect(tile_x(2) + 7, 44 + 7, 8, 8)
@@ -692,14 +658,7 @@ function ui.sampling(params_data, data, pos, len, active)
   screen.rect(tile_x(2) + 15, 44 + 4, 1, 1)
   
   screen.fill()
- -- ui.tile(9, 'MODE', pos, data.ui_index)
---[[  ui.tile(6, 'SRC', src, data.ui_index)
-  ui.tile(7, 'REC', rec, data.ui_index)
-  ui.tile(8, 'STRT',  data.sampling.start, data.ui_index)
-  ui.tile(9, 'END', data.sampling.length, data.ui_index)
-  ui.tile(15, 'PLAY', play, data.ui_index)
-  ui.tile(16, 'SAVE', '', data.ui_index)
-  ui.tile(17, 'CLR', '', data.ui_index)]]
+
   screen.level(2)
   screen.rect(1 , 8,  83, 17)
   

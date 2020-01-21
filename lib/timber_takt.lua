@@ -4,6 +4,7 @@
 -- @module TimberEngine
 -- @release v1.0.0 Beta 6
 -- @author Mark Eats
+-- @minor tweaks for takt
 
 local ControlSpec = require "controlspec"
 local Formatters = require "formatters"
@@ -50,7 +51,6 @@ Timber.num_sample_params = 0
 
 local param_ids = {
   "sample", "quality", "transpose", "detune_cents", "play_mode", "start_frame", "end_frame", "loop_start_frame", "loop_end_frame",
-  "scale_by", "by_percentage", "by_length", "by_bars",
   "freq_mod_lfo_1", "freq_mod_lfo_2", "freq_mod_env",
   "filter_type", "filter_freq", "filter_resonance", "filter_freq_mod_lfo_1", "filter_freq_mod_lfo_2", "filter_freq_mod_env", "filter_freq_mod_vel", "filter_freq_mod_pressure", "filter_tracking",
   "pan", "pan_mod_lfo_1", "pan_mod_lfo_2", "pan_mod_env", "amp", "amp_mod_lfo_1", "amp_mod_lfo_2",
@@ -199,10 +199,7 @@ local function sample_loaded(id, streaming, num_frames, num_channels, sample_rat
   
   update_by_bars_options(id)
   local duration = num_frames / sample_rate
-  params:lookup_param("by_length_" .. id).controlspec.default = duration
-  params:lookup_param("by_length_" .. id).controlspec.minval = duration * 0.1
-  params:lookup_param("by_length_" .. id).controlspec.maxval = duration * 10
-  
+
   -- Set defaults
   if samples_meta[id].manual_load then
     if streaming == 0 then
@@ -222,11 +219,7 @@ local function sample_loaded(id, streaming, num_frames, num_channels, sample_rat
     
     params:set("transpose_" .. id, 0)
     params:set("detune_cents_" .. id, 0)
-    params:set("scale_by_" .. id, 1)
-    params:set("by_length_" .. id, duration)
-    params:set("by_percentage_" .. id, specs.BY_PERCENTAGE.default)
-    if beat_params then params:set("by_bars_" .. id, 14) end
-    
+
   else
     -- These need resetting after having their ControlSpecs altered
     params:set("start_frame_" .. id, start_frame)
@@ -272,7 +265,7 @@ function Timber.clear_samples(first, last)
   
   local extended_params = {}
   for _, v in pairs(param_ids) do table.insert(extended_params, v) end
-  for _, v in pairs(extra_param_ids) do table.insert(extended_params, v) end
+  --for _, v in pairs(extra_param_ids) do table.insert(extended_params, v) end
   
   for i = first, last do
     
@@ -324,7 +317,7 @@ end
 local function update_by_bar_multipliers()
   for i = 0, Timber.num_sample_params - 1 do
     if params:get("scale_by_" .. i) == 3 then
-      update_freq_multiplier(i)
+      --update_freq_multiplier(i)
     end
   end
 end
@@ -375,7 +368,7 @@ local function move_copy_update(from_id, to_id)
   local ids = {from_id, to_id}
   for _, id in pairs(ids) do
     update_by_bars_options(id)
-    update_freq_multiplier(id)
+    --update_freq_multiplier(id)
     samples_meta[id].positions = {}
     samples_meta[id].playing = false
     Timber.meta_changed_callback(id)    
@@ -568,11 +561,11 @@ local function set_marker(id, param_prefix)
   
   if param_prefix == "start_frame_" or start_frame ~= params:get("start_frame_" .. id) then
     engine.startFrame(id, params:get("start_frame_" .. id))
-    update_freq_multiplier(id)
+    --update_freq_multiplier(id)
   end
   if param_prefix == "end_frame_" or end_frame ~= params:get("end_frame_" .. id) then
     engine.endFrame(id, params:get("end_frame_" .. id))
-    update_freq_multiplier(id)
+    --update_freq_multiplier(id)
   end
   
   waveform_last_edited = {id = id, param = param_prefix .. id}
@@ -738,8 +731,8 @@ function Timber.add_sample_params(id, include_beat_params, extra_params)
       params:set("loop_start_frame_" .. id, 0)
       params:lookup_param("loop_end_frame_" .. id).controlspec.maxval = MAX_FRAMES
       params:set("loop_end_frame_" .. id, MAX_FRAMES)
-      params:lookup_param("by_length_" .. id).controlspec.minval = 0
-      params:lookup_param("by_length_" .. id).controlspec.maxval = 100000
+      --params:lookup_param("by_length_" .. id).controlspec.minval = 0
+      --params:lookup_param("by_length_" .. id).controlspec.maxval = 100000
       local play_mode_param = params:lookup_param("play_mode_" .. id)
       play_mode_param.options = options.PLAY_MODE_BUFFER
       play_mode_param.count = #options.PLAY_MODE_BUFFER
@@ -772,45 +765,7 @@ function Timber.add_sample_params(id, include_beat_params, extra_params)
     Timber.setup_params_dirty = true
   end}
   
-  local scale_by_options
-  if include_beat_params then scale_by_options = options.SCALE_BY
-  else scale_by_options = options.SCALE_BY_NO_BARS end
-  params:add{type = "option", id = "scale_by_" .. id, name = "Scale By", options = scale_by_options, default = 1, action = function(value)
-    update_by_bars_options(id)
-    update_freq_multiplier(id)
-    Timber.views_changed_callback(id)
-    Timber.setup_params_dirty = true
-  end}
-  
-  params:add{type = "control", id = "by_percentage_" .. id, name = "Percentage", controlspec = specs.BY_PERCENTAGE, formatter = format_by_percentage(id), action = function(value)
-    update_freq_multiplier(id)
-    Timber.views_changed_callback(id)
-    Timber.setup_params_dirty = true
-  end}
-  params:add{type = "control", id = "by_length_" .. id, name = "Length", controlspec = ControlSpec.new(0.1, 10, "lin", 0, 1, "s"), formatter = format_by_length(id), action = function(value)
-    update_freq_multiplier(id)
-    Timber.views_changed_callback(id)
-    Timber.setup_params_dirty = true
-  end}
-  
-  if include_beat_params then
-    params:add{type = "option", id = "by_bars_" .. id, name = "Bars", options = options.BY_BARS_NA, action = function(value)
-      update_freq_multiplier(id)
-      Timber.views_changed_callback(id)
-      Timber.setup_params_dirty = true
-    end}
-  end
-  
-  local store_extra_param_ids = false
-  if #extra_param_ids == 0 then store_extra_param_ids = true end
-  if extra_params then
-    for _, v in ipairs(extra_params) do
-      params:add(v)
-      if store_extra_param_ids then
-        table.insert(extra_param_ids, string.sub(v.id, 1, string.match(v.id, '^.*()_') - 1))
-      end
-    end
-  end
+
   
   params:add_separator()
   
@@ -991,12 +946,5 @@ function Timber.add_sample_params(id, include_beat_params, extra_params)
   
   Timber.num_sample_params = Timber.num_sample_params + 1
 end
-
-
-
-
-
-
-
 
 return Timber
