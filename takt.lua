@@ -509,6 +509,7 @@ local step_params = {
   [0] = function(tr, s, d) -- offset
       data[data.pattern][tr].params[s].offset = util.clamp(data[data.pattern][tr].params[s].offset + d, 0, 15)
       move_substep(tr, get_step(s), get_step(s) + data[data.pattern][tr].params[s].offset)
+      data[data.pattern][tr].params[s].retrig = 0
   end,
   [1] = function(tr, s, d) -- sample
       data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 0, 99)
