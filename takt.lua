@@ -1,852 +1,880 @@
 -- takt
+-- @its_your_bedtime
 --
---
--- takt is a parameter locking
--- sequencer
---
--- row 1
--- key 1 - start/stop
--- key 15/16 - shift/alt
---
--- press step to enter lock edit mode
--- hold step to remove trig
---
--- shift + column 16 - mutes
--- shift + 1-15 - per track dividers
---
---
--- hold btn 1 to enter main menu
---
+-- parameter locking sequencer
 --
 
-engine.name = 'Ack'
-local Ack = require "ack/lib/ack"
+local engines = include('lib/engines')
+local ui = include('lib/ui')
 local beatclock = require 'beatclock'
-local tab = require 'tabutil'
-local fileselect = require 'fileselect'
-local textentry = require "textentry"
-
-
-data = {}
-
-local engine_params = {"speed",  "sampleStart","volumeEnvAttack", "volumeEnvRelease",  "delaySend", "reverbSend","volume", "filterCutoff", "filterRes" }
-local lock_params = {"_speed","_start_pos","_vol_env_atk", "_vol_env_rel", "_delay_send", "_reverb_send" ,"_vol", "_filter_cutoff", "_filter_res", "_filter_env_mod", "_filter_mode", "_dist", "_pan", "_reverb_send","_filter_env_atk", "_filter_env_rel" }
-local disp_meters = {" %"," %"," ms", " ms"," dB",  " dB", " dB", " Hz", " %","","","%","",""}
-local tablenames = {"steps_rpt", "steps_rpt_div", "steps_prob", "steps_div", "steps"}
-local ui_menu =   {"SPD: ","POS: ", "ATK: ", "REL: ","DEL: ", "REV: " , "VOL: ", "CUT: ", "RES: ","ENV: ", "FLT: ", "DST: " }
-local ui_alt_menu =   {"LOOP: ", "LPOS: ","FATK: ", "FREL: " , "MUTE: ", "", "REVERB: ", "SIZE: ", "DAMP: ", "DELAY: ", "TIME: ", "FDBK: "}
-local alt_lock_params = {"_loop", "_loop_point", "_filter_env_atk" ,"_filter_env_rel", "_in_mutegroup", "_pan","reverb_level", "reverb_room_size", "reverb_damp", "delay_level", "delay_time", "delay_feedback"}
-local ui_lock_menu =   {"SPD: ", "POS: ","ATK: ", "REL: ", "DEL: ", "REV: " ,"VOL: ", "CUT: ", "RES: ", "RPT: ", " / ",  "PRB:  ", "DIV: "}
-
-local val = {}
-local next_val = {}
-local last_val = {}
-local project = 1
-local pattern = 1
-local patternview = false
-local stepsview = true
-local mainmenu  = false
-local trackeditmode = true
-local alttrackeditmode = false
-local lockeditmode = false
-local patselect = pattern
-local down_time = 0
+local music = require 'musicutil'
+local fileselect = require('fileselect')
+local textentry = require('textentry')
+local midi_clock
 local hold_time = 0
-local voice_lock = 1
-local step_lock = 1
-local disptrack = 1
-local enc_line = 1
-local metapos = 1
-local metaplay = false
-local copy_mode = false
-local blink = false
-local copy_source_x = -1
-local copy_source_y = -1
-local position = 1
-local trigdisp = {0,0,0,0,0,0,0}
-local voicepos = {0,0,0,0,0,0,0}
-local VOICES = 7
-local alt = false
-local shift = false
-local ct = 0
-local held = {}
-local heldmax = {}
-local first = {}
-local second = {}
-local loadchannel = 1
-local metroicon = 0
-local filesel = false
-local project_to_load = 1
-local project_to_save = 16
-local pattern_to_copy = pattern
+local down_time = 0
+local offset = 0
+local retrig = 0
+local strack = 1
+local counter = 0
+local mstep = 0
+local blink = 1
+local ALT, SHIFT, MOD = false, false, false
+local hold, holdmax, first, second = {}, {}, {}, {}
+local copy = { false, false }
 
-local function load_sample(file)
-  if file ~= "cancel" then
-    if file:find(".aif") or file:find(".wav") then
-      params:set(loadchannel.."_sample",file)
+local g = grid.connect()
+
+local data = {
+  pattern = 1,
+  ui_index = 1,
+  selected = { 1, false }, 
+  settings = {},
+  in_l = 0,
+  in_r = 0,
+  sampling = {
+    source = 1,
+    mode = 1,
+    play = false,
+    rec = false,
+    start = 0,
+    length = 60,
+    slot = 1, 
+  },
+
+}
+
+local view = { steps_engine = true, sampling = false, patterns = false } 
+
+local choke = { 1, 2, 3, 4, 5, 6, 7 }
+
+local rule = {
+  [0] = { 'OFF', function() return true end },
+  [1] = { '10%', function() return 10 >= math.random(100) and true or false end },
+  [2] = { '20%', function() return 20 >= math.random(100) and true or false end },
+  [3] = { '30%', function() return 30 >= math.random(100) and true or false end },
+  [4] = { '50%', function() return 50 >= math.random(100) and true or false end },
+  [5] = { '60%', function() return 60 >= math.random(100) and true or false end },
+  [6] = { '70%', function() return 70 >= math.random(100) and true or false end },
+  [7] = { '90%', function() return 90 >= math.random(100) and true or false end },
+  
+  [8] = { 'PREV', function(tr, step) return data[data.pattern][tr].params[step - 1].playing end },
+  [9] = { 'NEXT', function(tr, step) return data[data.pattern][tr].params[step + 1].playing end },
+  
+  [10] = {'EVERY 2', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 2 == 0 and true or false  end },
+  [11] = {'EVERY 3', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 3 == 0 and true or false  end },
+  [12] = {'EVERY 4', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 4 == 0 and true or false  end },
+  [13] = {'EVERY 5', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 5 == 0 and true or false  end },
+  [14] = {'EVERY 6', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 6 == 0 and true or false  end },
+  [15] = {'EVERY 7', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 7 == 0 and true or false  end },
+  [16] = {'EVERY 8', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 8 == 0 and true or false  end },
+  
+  
+}
+
+local function set_bpm(n)
+    data[data.pattern].bpm = n
+    sequencer_metro.time = 60 / data[data.pattern].bpm --[[bpm]] / 16 --[[ppqn]] / 4 --params:get("beats_per_data.pattern")
+    engines.set_bpm(data[data.pattern].bpm)
+    midi_clock:bpm_change(data[data.pattern].bpm)
+end
+
+local function load_project(pth)
+  
+  sequencer_metro:stop() 
+  midi_clock:stop()
+  engine.noteOffAll()
+  
+  if string.find(pth, '.tkt') ~= nil then
+    local saved = tab.load(pth)
+    if saved ~= nil then
+      print("data found")
+      for k,v in pairs(saved[2]) do data[k] = v end
+      set_bpm(saved[2].bpm)
+      if saved[1] then params:read(norns.state.data .. saved[1] .. ".pset") end
     else
-      print("not a sound file")
+      print("no data")
     end
-    filesel = false
-    redraw()
   end
 end
 
-local function textentry_callback(txt)
+local function save_project(txt)
+  sequencer_metro:stop() 
+  midi_clock:stop()
+  engine.noteOffAll()
   if txt then
-    data.name = txt
+    tab.save({ txt, data }, norns.state.data .. txt ..".tkt")
+    params:write( norns.state.data .. txt .. ".pset")
   else
+    print("save cancel")
   end
-  redraw()
+end
+
+local function get_step(x)
+  return (x * 16) - 15
+end
+
+local function get_substep(tr, step)
+    for s = (step*16) - 15, (step*16) + 15 do
+      if data[data.pattern][tr][s] == 1 then
+        --return { s, data[data.pattern][tr][s] }
+        return true
+      end
+      --data[data.pattern][tr][s][1] = (s == t) and 1 or 0
+    end
+end
+
+local function set_view(x)
+    data.ui_index = 1 --x =='sampling' and 7 or 1
+    
+    for k, v in pairs(view) do
+      if k == x then
+        view[k] = true
+      else
+        view[k] = false
+      end
+    end
+end
+
+local function reset_params(tr, step, replace)
+    data[data.pattern][tr].params[step][k] = data[data.pattern][tr].params['TR'.. tr]
+end
+
+
+local function sync_tracks()
+  for i=1, 7 do
+    data[data.pattern].track.pos[i] = counter
+  end
+end
+
+local function set_loop(tr, start, len)
+  --print(tr,start, len)-- get_step(len) * 16)
+  if start == 1 and len == 16 then
+    sync_tracks()
+  end
+    data[data.pattern].track.start[tr] = get_step(start)-- (start * 16) - 15
+    data[data.pattern].track.len[tr] = get_step(len) + 15
+  
 end
 
 local function simplecopy(obj)
   if type(obj) ~= 'table' then return obj end
   local res = {}
   for k, v in pairs(obj) do
-    res[simplecopy(k)] = simplecopy(v)
+    res[k] = v
   end
   return res
 end
 
-local function copy_pattern(src,dst)
-  data[dst] = simplecopy(data[src])
-end
-
-local function tempmod(tr,div)
-  data[pattern].tempdivtr[tr] = div
-  for i=1,VOICES do
-    voicepos[i] = position
-  end
-end
-
-local function set_loop(tr,startp,seql)
-  if startp == 1 and seql == 16 then
-    tempmod(tr,data[pattern].tempdivtr[tr])
-  else
-    data[pattern].startpos[tr] = startp
-    data[pattern].seqlen[tr] = seql
-  end
-end
-
-local function save_project(num)
-  if util.file_exists(_path.data .. "takt/") == false then
-    util.make_dir(_path.data .. "takt/")
-  end
-  data[pattern].bpm = params:get("bpm")
-  data.lastpattern = pattern
-  tab.save(data,_path.data .. "takt/takt-pat-"..num ..".data")
-  params:write(_path.data .. "takt/takt-param-"..num ..".pset")
-end
-
-local function load_project(num)
-  saved_data = tab.load(_path.data .. "takt/takt-pat-"..num ..".data")
-  if saved_data ~= nil then
-    data = saved_data
-    pattern = data.lastpattern
-    params:read(_path.data .. "takt/takt-param-"..num  .. ".pset")
-    params:set("bpm", data[pattern].bpm) -- load bpm
-    for v=1,VOICES do -- set loop points
-      set_loop(v,data[pattern].startpos[v],data[pattern].seqlen[v])
+local function copy_step(src, dst)
+    for i = 0, 15 do
+      data[data.pattern][dst[1]][get_step(dst[2]) + i] = data[data.pattern][src[1]][get_step(src[2]) + i]
     end
-    redraw()
-  else
-    print("no file")
-    init()
-  end
+    data[data.pattern][dst[1]].params[dst[2]] = data[data.pattern][src[1]].params[src[2]]
+    
+    data[data.pattern][dst[1]].params[dst[2]]  = simplecopy(data[data.pattern][src[1]].params[src[2]])
 end
 
-local function switch_pattern(pat)
-  pattern = pat
-  for v=1,VOICES do
-    set_loop(v,data[pattern].startpos[v],data[pattern].seqlen[v])
-  end
-end
+local function get_params(tr, step, lock)
+    if not step then
+      return data[data.pattern][tr].params['TR' .. tr]
+    else
+      local res = data[data.pattern][tr].params[step] 
+      if lock then 
+        res.default = data[data.pattern][tr].params['TR' .. tr]
 
-local function randomize_locks(v,p)
-  local max_clamp = {500,100,100,1200,0,0,0,20000,100}
-  local min_clamp = {0,0,0,0,-60,-60,-30,0,0}
-  local delta_mult = {0.01,0.01,0.01,0.01,1,1,1,1,0.01}
-  for i=1,16 do
-    if data[pattern].steps[v][i] ~= 0 then
-      data[pattern].locks[lock_params[p]][v][i] = math.random(min_clamp[p], max_clamp[p]) * delta_mult[p]
-    end
-  end
-end
-
-local function erase_locks(voice)
-  for i=1,16 do
-    for p = 1,#engine_params do
-    data[pattern].locks[lock_params[p]][voice][i] = 0
-    end
-  end
-end
-
-local function erase_lock(voice,step,lock)
-  data[pattern].locks[lock_params[lock]][voice][step] = 0
-  redraw()
-end
-
-local function erase_step(voice,step)
-  local defaults = {0,1,100,0,0,0}
-  for i=1,#tablenames do
-    data[pattern][tablenames[i]][voice][step] = defaults[i]
-    end
-  for i=1,#engine_params do
-    data[pattern].locks[lock_params[i]][voice][step] = 0
-  end
-end
-
-local function copy_step(x1,y1,x2,y2)
-  for i=1,#tablenames do
-    data[pattern][tablenames[i]][y2][x2] = data[pattern][tablenames[i]][y1][x1]
-  end
-  for i=1,#engine_params do
-    data[pattern].locks[lock_params[i]][y2][x2] = data[pattern].locks[lock_params[i]][y1][x1]
-  end
-end
-
-local function read_locks(voice, step)
-  for i=1,#engine_params do
-    val[voice][i] = data[pattern].locks[lock_params[i]][voice][step]
-    next_val[voice][i] = data[pattern].locks[lock_params[i]][voice][step + 1]
-    if val[voice][i] ~= 0 and next_val[voice][i] ~= val[voice][i] then
-      last_val[voice][i] = val[voice][i]
-      data[pattern].displocks[lock_params[i]][voice] = 1
-      engine[engine_params[i]](voice - 1, val[voice][i])
-    end
-  end
-end
-
-local function reset_params(voice)
-  for i=1,#engine_params do
-    if data[pattern].steps[voice][voicepos[voice]] ~= 0 and next_val[voice][i] ~= val[voice][i] then
-      engine[engine_params[i]](voice - 1, params:get(voice .. lock_params[i]))
-      data[pattern].displocks[lock_params[i]][voice] = 0
-    elseif val[voice][i] ~= 0 then
-      data[pattern].displocks[lock_params[i]][voice] = 0
-    end
-  end
-end
-
-local function prelisten()
-  read_locks(voice_lock,step_lock)
-  engine.trig(voice_lock-1)
-end
-
-
-local function metaseq()
-  if ct % (data.metatempdiv > 0 and data.metatempdiv or data.metatempdivpat[pattern]) == 0 then
-    if metaplay == true then
-      if data.metastartpos > 1 then
-        metapos = util.clamp(((metapos  %  data.metaseqlen) + 1),data.metastartpos,data.metaseqlen)
-      else
-        metapos = (metapos  %  data.metaseqlen) + 1
       end
-      if data.metaval[metapos] ~= 0 then
-       switch_pattern(data.metaval[metapos])
-       end
-    if not filesel then redraw() else end
+      return res
     end
+end
+
+local function get_midi_params(tr, step)
+    if not step then
+      return data[data.pattern][tr].midi['TR' .. tr]
+    else
+      return data[data.pattern][tr].midi[step] 
+    end
+end
+
+local function is_lock()
+    local src = data.selected
+    if src[2] == false then
+      return 'TR' .. src[1]
+    else
+      return src[2]
+    end
+end
+
+local function open_sample_settings()
+    local p = is_lock()
+    norns.menu.toggle(true)
+    _norns.enc(1, 100)
+    _norns.enc(2,-9999999)
+    _norns.enc(2, 25 +(data[data.pattern][data.selected[1]].params[p].sample * 104))
+end
+
+local function choke_group(tr, step)
+  local last = choke[tr]
+
+  if data[data.pattern][tr].params[step].lock and data[data.pattern][tr].params[step].playing then
+    
+    engine.noteOff(last)
+  
   end
 end
 
-local function draw_bar()
-  screen.level(not lockeditmode and 3 or 8 )
-  screen.rect(0,0,128,11)
-  screen.fill()
-  if trackeditmode or alttrackeditmode then
-    screen.level(0)
-    screen.rect(2,2,8,8)
-    screen.stroke()
-    screen.move(4,8)
-    screen.text(not lockeditmode and disptrack or voice_lock)
-    if lockeditmode then
-      screen.move(16,8)
-      screen.text_center(step_lock)
-      screen.rect(12,2,10,8)
-      screen.stroke()
-    end
-  screen.level(enc_line == 0 and 15 or 0)
-  screen.move ((trackeditmode or alttrackeditmode) and not lockeditmode and 12 or 24 ,8)
-  screen.text(params:string((not lockeditmode and disptrack or voice_lock) .."_sample"))
-  end
-  screen.level(not lockeditmode and 3 or 8 )
-  screen.rect((metaplay == true and 91 or 100),0,(metaplay == true and 37 or 28),11)
-  screen.fill()
-  screen.level(0)
-  screen.move(102,8)
-  screen.line(107,3)
-  screen.line(112,8)
-  screen.line(103,8)
-  screen.stroke()
-  screen.move(107,6)
-  screen.line(metroicon <=1 and 103 or 111,2)
-  screen.stroke()
-  screen.level(mainmenu and enc_line == 6 and 15 or 0)
-  screen.move(127,8)
-  screen.text_right(""..params:get("bpm"))
-  if metaplay == true then
-    screen.level(metroicon <=1 and 0 or 15)
-    screen.move(94,8)
-    screen.text("M")
-  end
-end
+local function set_locks(step_param)
+   local param_ids = {
+                ['sr'] = "quality",  
+                --['mode'] = "play_mode", 
+                ['start'] = "start_frame", 
+                ['s_end'] = "end_frame",
+                ['freq_lfo1'] = "freq_mod_lfo_1", 
+                ['freq_lfo2'] = "freq_mod_lfo_2", 
+                ['ftype'] = "filter_type", 
+                ['cutoff'] = "filter_freq", 
+                ['resonance'] = "filter_resonance", 
+                ['cut_lfo1'] = "filter_freq_mod_lfo_1", 
+                ['cut_lfo2'] = "filter_freq_mod_lfo_2", 
+                ['pan'] = "pan",
+                ['vol'] = "amp", 
+                ['amp_lfo1'] = "amp_mod_lfo_1", 
+                ['amp_lfo2'] = "amp_mod_lfo_2",
+                ['attack'] = "amp_env_attack",
+                ['decay'] = "amp_env_decay", 
+                ['sustain'] = "amp_env_sustain", 
+                ['release'] = "amp_env_release",
+              }
 
-local function count()
-  ct = ct + 1
-  for v = 1,VOICES do
-    if ct % (data[pattern].tempdiv[v] > 0 and data[pattern].tempdiv[v] or data[pattern].tempdivtr[v]) == 0 then
-      --reset_params(v)
-      position = (position % 16) + 1
-      voicepos[v] = util.clamp((voicepos[v] % data[pattern].seqlen[v]) + 1, data[pattern].startpos[v], data[pattern].seqlen[v]) -- voice pos
-      position = voicepos[v]
-      if data[pattern].steps[v][voicepos[v]] ~= 0 then
-        if data[pattern].steps_prob[v][voicepos[v]] >= math.random(100) and data.mute[v] == 0 then
-          reset_params(v)
-          trigdisp[v] = 15
-          if data[pattern].steps_div[v][voicepos[v]] > 0 then
-            data[pattern].tempdiv[v] = data[pattern].steps_div[v][voicepos[v]]
-          elseif data[pattern].steps_div[v][voicepos[v]] == 0 then
-            data[pattern].tempdiv[v] = 0
-          end
-          read_locks(v,voicepos[v])
-          engine.trig(v-1)
-          if data[pattern].steps_rpt[v][voicepos[v]] > 0 then
-            local rpt_time = ( params:get("bpm") / 7000 ) * data[pattern].steps_rpt_div[v][voicepos[v]]
-            rpt[v].event = function() engine.trig(v-1) end
-            rpt[v].time = rpt_time
-            rpt[v].count = data[pattern].steps_rpt[v][voicepos[v]]
-            rpt[v]:start()
-            --rpt[v]:free(v)
+          for k, v in pairs(step_param) do
+            if param_ids[k] ~= nil then
+              local old = params:get(param_ids[k]  .. '_' .. step_param.sample, v)
+              --print('setting '..param_ids[k].. '_' .. step_param.sample .. ' to '..v .. ' was ' .. old)
+              params:set(param_ids[k]  .. '_' .. step_param.sample, v)
             end
-        else
-          trigdisp[v] = 9
+          end
+end
+
+local function seqrun(counter)
+  --counter = counter < 16 * 16 and counter + 1 or 1
+
+  for tr = 1, 7 do
+
+      local start = data[data.pattern].track.start[tr]
+      local len = data[data.pattern].track.len[tr]
+
+      if counter % data[data.pattern].track.div[tr] == 0 then
+
+        data[data.pattern].track.pos[tr] = util.clamp((data[data.pattern].track.pos[tr] + 1) % (len ), start, len) -- voice pos
+        data[data.pattern].track.p_pos[tr] = math.ceil(data[data.pattern].track.pos[tr] / 16)
+        data[data.pattern].track.cycle[tr] = data[data.pattern].track.p_pos[tr] <= len / 16 and data[data.pattern].track.cycle[tr] + 1 or 0--data[data.pattern].track.cycle[tr]
+
+        local mute = data[data.pattern].track.mute[tr]
+        
+        if data[data.pattern][tr][data[data.pattern].track.pos[tr]] == 1 and not mute  then
+          
+          local step_param
+          local play = true
+           
+          
+          
+          if get_params(tr, data[data.pattern].track.p_pos[tr]).lock == 1 then
+            step_param = get_params(tr, data[data.pattern].track.p_pos[tr])
+            set_locks(step_param)
+           else
+            step_param = get_params(tr)--, 'TR'..tr)
+            set_locks(step_param)
+          end
+          
+       
+          if step_param.rule ~= 0 then
+            play = rule[step_param.rule][2](tr, data[data.pattern].track.p_pos[tr]) 
+            data[data.pattern][tr].params[data[data.pattern].track.p_pos[tr]].playing = play
+            --print('PLAY RULE - ' .. (play and 'PLAYING' or 'NAH'))
+          end
+          
+          
+          local play = data[data.pattern][tr].params[data[data.pattern].track.p_pos[tr]].playing
+          
+          if play then 
+            --handle_rev_triggers(tr, step_param)
+            choke_group(tr, data[data.pattern].track.p_pos[tr])
+            engine.noteOn(step_param.sample, music.note_num_to_freq(step_param.note), 1, step_param.sample) 
+            choke[tr] = step_param.sample
+          end
         end
+
+    end
+  end
+  
+end
+
+local function clear_substeps(tr, s )
+    local l = get_step(s) 
+    for s = l, l + 15 do
+      data[data.pattern][tr][s] = 0
+    end
+end
+
+local function move_substep(tr, step, t)
+     for s = step, step + 15 do
+      data[data.pattern][tr][s] = (s == t) and 1 or 0 
+    end
+end
+
+local function make_retrigs(tr, step, t)
+    local t = 16 - t 
+    local offset = data[data.pattern][tr].params[step].offset
+    
+    local st = get_step(step) + 1
+
+    for s = st + offset, (st + 14) - offset do
+      if t == 16 then
+        data[data.pattern][tr][s] = 0
+      elseif s % t == 1 then
+        data[data.pattern][tr][s] = s - offset == st and 1 or 0
+      else
+        data[data.pattern][tr][s] = ((s + offset) % t == 0) and 1 or 0
       end
     end
-  metroicon = (metroicon + 1) % 4
-  end
-  if filesel then else redraw() end
+end
+
+local function have_substeps(tr, step)
+    local st = get_step(step) 
+    for s = st, st + 15 do
+      if data[data.pattern][tr][s] == 1 then
+        return s
+      end
+    end
+end
+
+local function get_tr_start( tr )
+  return math.ceil(data[data.pattern].track.start[tr] / 16)
+end
+
+local function get_tr_len( tr )
+  return math.ceil(data[data.pattern].track.len[tr] / 16)
 end
 
 function init()
-  for i=1,VOICES do
-    rpt = metro.init()
-  end
-  counter = beatclock.new()
-  counter.on_step = function() count() metaseq() end
-  counter:add_clock_params()
-  metro_grid_redraw = metro.init{event = function(stage) grid_redraw() end, time = 1 / 30}
-  metro_grid_redraw:start()
-  metro_blink = metro.init{event = function(stage) blink = not blink end,time = 1 / 4}
-  metro_blink:start()
-  params:add_separator()
-  Ack.add_effects_params()
-  params:add_separator()
-  for channel=1,VOICES do
-    Ack.add_channel_params(channel)
-  end
-  params:bang()
-  -- init patterns
-  data.lastpattern = pattern
-  data.metaseqlen = 16
-  data.metastartpos = 1
-  data.metatempdiv = 1
-  data.metaval = {}
-  data.metatempdivpat = {}
-  data.mute = {}
-  for i=1,16 do
-    data[i] = {}
-    data[i].bpm = 110
-    data[i].steps = {}
-    data[i].steps_rpt = {}
-    data[i].steps_rpt_div = {}
-    data[i].steps_div = {}
-    data[i].steps_prob = {}
-    data[i].seqlen = {}
-    data[i].startpos = {}
-    data[i].tempdiv = {}
-    data[i].tempdivtr = {}
-    data.metaval[i] = 0
-    data.metatempdivpat[i] = 1
-    for v=1,VOICES do
-      data.mute[v] = 0
-      data[i].steps[v] = {}
-      data[i].steps_rpt[v] = {}
-      data[i].steps_rpt_div[v] = {}
-      data[i].steps_div[v] = {}
-      data[i].steps_prob[v] = {}
-      data[i].seqlen[v] = 16
-      data[i].startpos[v] = 1
-      data[i].tempdiv[v] = 1
-      data[i].tempdivtr[v] = 1
-      for l=1,16 do
-        table.insert(data[i].steps[v],0)
-        table.insert(data[i].steps_rpt[v],0)
-        table.insert(data[i].steps_rpt_div[v],1)
-        table.insert(data[i].steps_div[v],0)
-        table.insert(data[i].steps_prob[v],100)
-      end
-    end
-  end
-  -- init locks data
-  for p=1,#data do
-    data[p].locks = {}
-    data[p].displocks = {}
-    for i= 1,#engine_params do
-      held[i] = 0
-      heldmax[i] = 0
+  
+    math.randomseed(os.time())
+
+    params:add_trigger('save_p', "< Save project" )
+    params:set_action('save_p', function(x) textentry.enter(save_project,  'new') end)
+    params:add_trigger('load_p', "> Load project" )
+    params:set_action('load_p', function(x) fileselect.enter(norns.state.data, load_project) end)
+    params:add_trigger('new', "+ New" )
+    params:set_action('new', function(x) init() end)
+    params:add_separator()
+
+
+  
+  local vu_l, vu_r = poll.set("amp_in_l"), poll.set("amp_in_r")
+  vu_l.time, vu_r.time = 1 / 30, 1 / 30
+  
+  vu_l.callback = function(val) data.in_l = util.clamp(val * 180, 1, 70) end
+  vu_r.callback = function(val) data.in_r = util.clamp(val * 180, 1, 70) end
+  vu_l:start()
+  vu_r:start()
+
+    for i = 1, 7 do
+      hold[i] = 0
+      holdmax[i] = 0
       first[i] = 0
       second[i] = 0
-      data[p].locks[lock_params[i]] = {}
-      data[p].displocks[lock_params[i]] = {}
-      for v = 1,VOICES do
-        val[v] = {}
-        next_val[v] = {}
-        last_val[v] = {}
-        data[p].locks[lock_params[i]][v] = {}
-        data[p].displocks[lock_params[i]][v] = 0
-        for l=1,16 do
-          data[p].locks[lock_params[i]][v][l] = 0
-        end
+    end
+
+
+  for t = 1, 16 do
+    data[t] = {
+        bpm = 120,
+        track = {
+            mute = { false, false, false, false, false, false, false },
+            pos = { 0, 0, 0, 0, 0, 0, 0 },
+            p_pos =  { 0, 0, 0, 0, 0, 0, 0 },
+            start =  { 1, 1, 1, 1, 1, 1, 1 },
+            len = { 256, 256, 256, 256, 256, 256, 256 },
+            div = { 1, 1, 1, 1, 1, 1, 1 },
+            cycle = {1, 1, 1, 1, 1, 1, 1 },
+          },
+    }
+    
+    for l = 1, 7 do
+
+      data[t][l] = {}
+
+      data[t][l].params = {}
+      
+      data[t][l].params['TR'.. l] = {
+            rev = 1,
+            playing = true,
+            offset = 0,
+            sample = l,
+            note = 60,
+            retrig = 0,
+            mode = 3,
+            start = 0,
+            s_end = 999999,
+            vol = 0,
+            pan = 0,
+            attack = 0,
+            decay = 1,
+            sustain = 1,
+            release = 0,
+            ftype = 1,
+            cutoff = 20000,
+            resonance = 0,
+            sr = 4,
+            freq_lfo1 = 0,
+            freq_lfo2 = 0,
+            amp_lfo1 = 0,
+            amp_lfo2 = 0,
+            cut_lfo1 = 0,
+            cut_lfo2 = 0,
+            lock = 0,
+            rule = 0,
+            retrig = 0,
+        }
+        
+      for i=0,256 do
+        data[t][l][i] = 0
       end
+    
+
+      for k = 1, 16 do
+        data[t][l].params[k] = {}
+      setmetatable(data[t][l].params[k], {__index =  data[t][l].params['TR'..l]})
+      end
+    
     end
   end
+  
+    for i = 0, 99 do data.settings[i] = { length = nil, rev = false } end
+
+    sequencer_metro = metro.init()
+    sequencer_metro.time = 60 / data[data.pattern].bpm --[[bpm]] / 16 --[[ppqn]] / 4 --params:get("beats_per_data.pattern")
+    sequencer_metro.event = function(stage) seqrun(stage) end
+
+    redraw_metro = metro.init(function(stage) redraw() g:redraw() blink = (blink + 1) % 17 end, 1/30)
+    redraw_metro:start()
+    midi_clock = beatclock:new()
+    midi_clock.on_step = function() end
+    midi_clock:bpm_change(data[data.pattern].bpm)
+    midi_clock.send = true
+
+    engines.init()
+    ui.init()
 end
 
-g = grid.connect()
+local sampling_params = {
+  [-1] = function(d) data.sampling.mode = util.clamp(data.sampling.mode + d, 1, 4) engines.set_mode(data.sampling.mode) end,
+  [0] = function(d) data.sampling.source = util.clamp(data.sampling.source + d, 1, 2) engines.set_source(data.sampling.source) end,
+  [3] = function(d) data.sampling.slot = util.clamp(data.sampling.slot + d, 0, 99) end,
+  [4] = function(d) data.sampling.start = util.clamp(data.sampling.start + d / 10, 0, 60) engines.set_start(data.sampling.start)end,
+  [5] = function(d) data.sampling.length = util.clamp(data.sampling.length + d / 10, 0.1, 60) engines.set_length(data.sampling.length) end,
+  [6] = function(d) end, --play
+  [1] = function(d) end, --save
+  [2] = function(d) end, --clear
+  [7] = function(d) end, --clear
 
-g.key = function(x,y,z)
-  if z==1 and held[y] then
-    heldmax[y] = 0
-  end
-  held[y] = held[y] + (z*2-1)
-  if held[y] > heldmax[y] then
-    heldmax[y] = held[y]
-  end
-  if z == 1 then
-    if y == 8 then
-      if x == 1 then
-        if counter.playing then
-          counter:stop()
-        else
-          counter:start()
-        end
-      elseif x == 9 then
-        if patternview then
-          stepsview = true
-          patternview = false
-        else
-          patternview = true
-          stepsview = false
-        end
-      elseif x == 16 then
-        shift = true
-      elseif x == 15 then
-        alt = true
-      elseif x == 13 then
-        copy_mode = true
-        copy_source_x = step_lock
-        copy_source_y = voice_lock
-      end
-    end
-  elseif z == 0 then
-    if y == 8 then
-      if x == 16 then shift = false
-      elseif x == 15 then alt = false
-      elseif x == 13 then copy_mode = false
-      end
-    end
-  end
-  if copy_mode then
-    if stepsview then
-      if y == 8 and x == 12 and z == 1 then
-        randomize_locks(lockeditmode and voice_lock or disptrack,2)
-        redraw()
-      elseif y == 8 and x == 11 and z == 1 then
-        randomize_locks(lockeditmode and voice_lock or disptrack,1)
-        redraw()
-      elseif y == 8 and x == 14 and z == 1 then
-        erase_locks(lockeditmode and voice_lock or disptrack)
-        redraw()
-      elseif y < 8 and z == 1 then
-        if copy_source_x ~= -1 and not (copy_source_x == x and copy_source_y == y) then
-          copy_step(copy_source_x,copy_source_y,x,y)
-        end
-      end
-    elseif patternview then
-      if y == 1 and z == 1 then
-        copy_pattern(patselect, x)
-      end
-    end
-  end
-  if stepsview then
-    if not alt and not shift then
-      if z == 1 then down_time = util.time()
-      else hold_time = util.time() - down_time
-      if y == 8 and x == 5 and lockeditmode then prelisten()
-      elseif  y < 8 then
-          data[pattern].steps[y][x] = y
-          if data[pattern].steps[y][x] == y and hold_time > 0.3 then
-            erase_step(y,x)
-            lockeditmode = false
-            if enc_line > 10 then enc_line = enc_line - 1 end
-          elseif data[pattern].steps[y][x] == y and hold_time < 0.3 then
-            if not mainmenu then
-              lockeditmode = true
-              if enc_line == 0 then enc_line = 1 end
-            end
-            voice_lock = y
-            step_lock = x
-          end
-        end
-        if not filesel then redraw() end
-      end
-    elseif alt then
-      if y < 8 then
-      -- select step lock
-          if held[y] == 1 then
-            first[y] = x
-          elseif held[y] == 2 then
-            second[y] = x
-            data[pattern].startpos[y] = first[y]
-            data[pattern].seqlen[y] = second[y]
-            set_loop(y, data[pattern].startpos[y], data[pattern].seqlen[y])
-          end
-        end
-      end
-    if shift and y < 8 then
-      if x < 16 then
-        tempmod(y,x)
-        data[pattern].tempdiv[y] = x
-      elseif x == 16 and z == 1 then
-        if data.mute[y] == 0 then
-          data.mute[y] = 1
-        else
-          data.mute[y] = 0
-        end
-      end
-    end
-  end
-  if patternview then
-    if z == 1 and not shift then
-      if y == 1 and not alt then
-        if x ~= patselect then
-          patselect = x
-        elseif patselect == x then
-        switch_pattern(x)
-        end
-      elseif y == 2 then
-          if data.metaval[x] == 0 then
-            data.metaval[x] = patselect
-          elseif data.metaval[x] ~= patselect then
-            data.metaval[x] = patselect
-          else
-            data.metaval[x] = 0
-          end
-      elseif  y == 3 then
-        if held[y]==1 then
-          first[y] = x
-        elseif held[y]==2 then
-          second[y] = x
-          data.metastartpos = first[y]
-          data.metaseqlen = second[y]
-        end
-      elseif y == 4 then
-        data.metatempdiv = x * 4
-      elseif y == 6 and x == 2 then
-        if metaplay == true then
-          metaplay = false
-        else
-          metaplay = true
-          metapos = util.clamp(position, data.metastartpos,data.metaseqlen)
-        end
-      end
-    elseif z == 1 and shift then
-      if x == 16 and shift and z == 1 then
-        if data.mute[y] == 0 then
-          data.mute[y] = 1
-        else
-          data.mute[y] = 0
-        end
-      end
-    end
-  end
-end
+}
 
-function grid_redraw()
-  g:all(0)
-  g:led(1,8, counter.playing and 15 or 6) -- play/stop
-  g:led(9,8, patternview and 15 or 6) -- alt
-  g:led(16,8, shift and 15 or 6) -- alt
-  g:led(15,8, alt and 9 or 3) -- shift
-  g:led(13,8, copy_mode and 9 or 3)
-  g:led(5,8,lockeditmode and 2 or 0) -- prelisten
-  if copy_mode and not patternview then
-    g:led(11,8,blink and 3  or 1)
-    g:led(12,8,blink and 3 or 1)
-    g:led(14,8,blink and 3 or 1)
-  end
-  if patternview then
-    g:led(2,6, metaplay and 15 or blink and 6 or 3)
-    for i=1,16 do
-      g:led(i,1, i == pattern and 15 or i == patselect and blink and 9 or 4)
-      g:led(i,2,  data.metaval[i] == 0 and 0 or 8)
-      g:led(i,3, (i < data.metastartpos or i > data.metaseqlen) and 0 or 6)
-    end
-    if shift then
-      for v=1,VOICES do
-        g:led(15,v,0)
-        g:led(16,v,data.mute[v]== 1 and 15 or 6)
-      end
-    end
-    if metaplay then
-      g:led(metapos,2,15)
-    end
-    g:led(data.metatempdiv == 1 and data.metatempdiv or data.metatempdiv / 4 ,4,9)
-    g:led(position,7,metaplay and 9 or 3)
-  elseif stepsview then
-    if not shift then
-      for i=1,16 do
-        for v=1,VOICES do
-          if alt then
-            for i = data[pattern].startpos[v],data[pattern].seqlen[v] do
-              g:led(i,v, 0==data[pattern].steps[v][i] and 2 or 6 )
-            end
-            if data.mute[v] == 0 then
-              g:led(voicepos[v],v,3)
-            end
-          else
-          g:led(i,data[pattern].steps[v][i],
-                data.mute[v] == 1 and 3
-                or copy_mode and copy_source_x == i and copy_source_y == v and blink and 4
-                or step_lock == i and voice_lock == v and lockeditmode == true and 13
-                or i < data[pattern].startpos[v] and 2
-                or i > data[pattern].seqlen[v] and 2
-                or 8)
-          if counter.playing then
-            if data.mute[v] == 0 then
-              g:led(voicepos[v],v,0==data[pattern].steps[v][voicepos[v]] and 3 or trigdisp[v])
-            else
-              g:led(voicepos[v],v,1==data[pattern].steps[v][voicepos[v]] and 3 or 1)
-            end
-          end
-        end
-      end
-    end
-    elseif shift then
-      for i=1,16 do
-        for v=1,VOICES do
-          g:led(i,data[pattern].steps[v][i],alt == false and 2 or 4)
-          g:led(14,v,1)
-          g:led(16,v,data.mute[v]== 1 and 15 or 6)
-          if data.mute[v] == 0 then
-            g:led(voicepos[v] < data[pattern].seqlen[v] and voicepos[v] or 1,v,voicepos[v] == 16 and 16 or 3 )
-          end
-            g:led((data[pattern].tempdiv[v] > 0 and data[pattern].tempdiv[v] or data[pattern].tempdivtr[v]),v,9)
-        end
-      end
-    end
-  end
-  g:refresh()
-end
 
-function key(n, z)
-  if n == 1 and z == 1 then
-    if (trackeditmode or lockeditmode or alttrackeditmode) then
-      mainmenu = true
-      alttrackeditmode = false
-      trackeditmode = false
-      lockeditmode = false
-    elseif mainmenu then
-      alttrackeditmode = false
-      trackeditmode = true
-      lockeditmode = false
-      mainmenu = false
-    end
-    enc_line = 2
-    redraw()
-  elseif n == 2 and z == 1 then
-    if enc_line == 0 then
-      enc_line = 1
-      trackeditmode = false
-      alttrackeditmode = true
-    else
-      if lockeditmode then
-        disptrack = voice_lock
-        loadchannel = disptrack
-        lockeditmode = false
-        trackeditmode = true
-      elseif trackeditmode  then
-        if enc_line > 10 then enc_line = enc_line - 1 end
-          disptrack = disptrack - 1
-          filesel = false
-        if disptrack <= 0 then disptrack = 7 end
-          disptrack = util.clamp(disptrack,1,VOICES)
-      elseif mainmenu then
-        mainmenu = false
-        trackeditmode = true
-      elseif alttrackeditmode then
-        alttrackeditmode = false
-        trackeditmode = true
-        enc_line = enc_line == 1 and enc_line - 1 or enc_line
-      end
-    end
-    redraw()
-  elseif n == 3 and z == 1 then
-    if mainmenu then
-      if enc_line == 1 then
-        textentry.enter(textentry_callback, data.name == nil and ("untitled ".. project) or data.name)
-      elseif enc_line == 2 then
-        load_project(project_to_load) project = project_to_load
-      elseif enc_line == 5 then
-        copy_pattern(pattern, pattern_to_copy)
-      elseif enc_line == 3  then
-        save_project(project_to_save)
-      end
-      redraw()
-    elseif lockeditmode then
-      erase_lock(voice_lock,step_lock, enc_line)
-    elseif trackeditmode then
-      if enc_line == 0 then
-        loadchannel = disptrack
-        filesel = true
-        fileselect.enter(_path.audio, load_sample)
-      else
-        disptrack = disptrack + 1
-        filesel = false
-        if disptrack >= 8 then disptrack = 1 end
-        disptrack = util.clamp(disptrack,1,VOICES)
-      end
-    end
-  end
-  if filesel then else redraw() end
-end
+local step_params = {
+  [-6] = function(tr, s, d) -- ptn
+      data.pattern = (util.clamp(data.pattern + d, 1, 16))
+  end,
+  [-5] = function(tr, s, d) -- rnd
+      data.selected[1] = util.clamp(data.selected[1] + d, 1, 7)
+  end,
+  [-4] = function(tr, s, d) -- rnd
+      set_bpm(util.clamp(data[data.pattern].bpm + d, 1, 999))
+  end,
+  [-3] = function(tr, s, d) -- rnd
+      data[data.pattern].track.div[tr] = util.clamp(data[data.pattern].track.div[tr] + d, 1, 16)
+      sync_tracks()
+  end,
+  [-2] = function(tr, s, d) -- rule
+      data[data.pattern][tr].params[s].rule = util.clamp(data[data.pattern][tr].params[s].rule + d, 0, 16)
+  end,
+  [-1] = function(tr, s, d) -- retrig
+      data[data.pattern][tr].params[s].retrig = util.clamp(data[data.pattern][tr].params[s].retrig + d, 0, 15)
+      make_retrigs(tr, s, data[data.pattern][tr].params[s].retrig)
+  end,
+  [0] = function(tr, s, d) -- offset
+      data[data.pattern][tr].params[s].offset = util.clamp(data[data.pattern][tr].params[s].offset + d, 0, 15)
+      move_substep(tr, get_step(s), get_step(s) + data[data.pattern][tr].params[s].offset)
+  end,
+  [1] = function(tr, s, d) -- sample
+      data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 0, 99)
+  end,
+  [2] = function(tr, s, d) -- note
+      data[data.pattern][tr].params[s].note = util.clamp(data[data.pattern][tr].params[s].note + d, 25, 127)
+      --
+  end,
+  [3] = function(tr, s, d) -- start
+      local sample = data[data.pattern][tr].params[s].sample
+      local start = params:get("start_frame_" .. sample)
+      local length = params:get("end_frame_" .. sample)
+      data[data.pattern][tr].params[s].start = util.clamp(data[data.pattern][tr].params[s].start + ((d) * 10000), 0,  data.settings[sample].length or length)
+  end,
+  [4] = function(tr, s, d) -- mode
+      local sample = data[data.pattern][tr].params[s].sample
+      local start = params:get("start_frame_" .. sample)
+      local length = params:get("end_frame_" .. sample)
+
+      if data.settings[sample].length == nil then data.settings[sample].length = length  end
+      
+      data[data.pattern][tr].params[s].s_end = util.clamp(data[data.pattern][tr].params[s].s_end + ((d) * 10000), 0, data.settings[sample].length)
+      
+   end,
+  [5] = function(tr, s, d) -- freq mod lfo 1 freq_lfo1
+        data[data.pattern][tr].params[s].freq_lfo1 = util.clamp(data[data.pattern][tr].params[s].freq_lfo1 + d / 100, 0, 1)
+  end,
+  [6] = function(tr, s, d) -- freq mod lfo 2
+        data[data.pattern][tr].params[s].freq_lfo2 = util.clamp(data[data.pattern][tr].params[s].freq_lfo2 + d / 100, 0, 1)
+
+  end,
+  [7] = function(tr, s, d) -- volume
+        data[data.pattern][tr].params[s].vol = util.clamp(data[data.pattern][tr].params[s].vol + d  , -48, 16)
+  end,
+  [8] = function(tr, s, d) -- pan
+        data[data.pattern][tr].params[s].pan = util.clamp(data[data.pattern][tr].params[s].pan + d / 10 , -1, 1)
+  end,
+  [9] = function(tr, s, d) -- atk
+    data[data.pattern][tr].params[s].attack = util.clamp(data[data.pattern][tr].params[s].attack + d / 10, 0, 5)
+  end,
+  [10] = function(tr, s, d) -- dec
+      data[data.pattern][tr].params[s].decay = util.clamp(data[data.pattern][tr].params[s].decay + d / 10, 0, 5)
+  end,
+  [11] = function(tr, s, d) -- sus
+      data[data.pattern][tr].params[s].sustain = util.clamp(data[data.pattern][tr].params[s].sustain + d / 10, 0, 1)
+  end,
+  [12] = function(tr, s, d) -- rel
+      data[data.pattern][tr].params[s].release = util.clamp(data[data.pattern][tr].params[s].release + d / 10, 0, 10)
+  end,
+  [13] = function(tr, s, d) -- amp mod lfo 1
+        data[data.pattern][tr].params[s].amp_lfo1 = util.clamp(data[data.pattern][tr].params[s].amp_lfo1 + d / 100, 0, 1)
+
+  end,
+  [14] = function(tr, s, d) -- amp mod lfo 2
+        data[data.pattern][tr].params[s].amp_lfo2 = util.clamp(data[data.pattern][tr].params[s].amp_lfo2 + d / 100, 0, 1)
+
+  end,
+  [15] = function(tr, s, d) -- sample rate
+      data[data.pattern][tr].params[s].sr = util.clamp(data[data.pattern][tr].params[s].sr + d, 1, 4)
+  end,
+  [16] = function(tr, s, d) -- filter type
+      data[data.pattern][tr].params[s].ftype = util.clamp(data[data.pattern][tr].params[s].ftype + d, 1, 2)
+  end,
+  [17] = function(tr, s, d) -- sample
+      data[data.pattern][tr].params[s].cutoff = util.clamp(data[data.pattern][tr].params[s].cutoff + (d * 100), 0, 20000)
+  end,
+  [18] = function(tr, s, d) -- sample
+      data[data.pattern][tr].params[s].resonance = util.clamp(data[data.pattern][tr].params[s].resonance + d / 10, 0, 1)
+  end,
+  [19] = function(tr, s, d) -- filter cutoff mod lfo 1
+        data[data.pattern][tr].params[s].cut_lfo1 = util.clamp(data[data.pattern][tr].params[s].cut_lfo1 + d / 100, 0, 1)
+
+  end,
+  [20] = function(tr, s, d) -- filter cutoff mod lfo 2
+        data[data.pattern][tr].params[s].cut_lfo2 = util.clamp(data[data.pattern][tr].params[s].cut_lfo2 + d / 100, 0, 1)
+
+  end,
+  
+}
 
 function enc(n,d)
+  norns.encoders.set_sens(1,2)
   norns.encoders.set_sens(2,2)
-  norns.encoders.set_sens(3,2)
-  norns.encoders.set_accel(3, not mainmenu and true or false)
+  norns.encoders.set_accel(1, false)-- not mainmenu and true or false)
+  norns.encoders.set_accel(2, false)-- not mainmenu and true or false)
+  norns.encoders.set_accel(3, false)-- not mainmenu and true or false)
+
+  local tr = data.selected[1]
+  local s = data.selected[2] and data.selected[2] or 'TR' .. data.selected[1]
+  
   if n == 1 then
-    mix:delta("output",d)
+        data.selected[1] = util.clamp(data.selected[1] + d, 1, 7)
   elseif n == 2 then
-    enc_line = util.clamp(enc_line + d, (trackeditmode and not lockeditmode  )and 0 or 1,
-    lockeditmode and #ui_lock_menu
-    or alttrackeditmode and #ui_alt_menu
-    or trackeditmode and #ui_menu
-    or mainmenu and 6)
+    
+    if view.steps_engine then
+      if not K1_hold then 
+        data.ui_index = util.clamp(data.ui_index + d, not data.selected[2] and 1 or -2, 20)
+      else
+        data.ui_index = util.clamp(data.ui_index + d, -6, -3)
+      end
+    elseif view.sampling then
+      if not data.sampling.rec then
+        data.ui_index = util.clamp(data.ui_index + d, -1, 6)      
+      end
+    end
   elseif n == 3 then
-    if mainmenu then
-      if enc_line == 2 then
-        project_to_load = util.clamp(project_to_load + d,1,16)
-      elseif enc_line == 3 then
-       project_to_save = util.clamp(project_to_save + d,1,16)
-      elseif enc_line == 4 then
-        pattern = util.clamp(pattern + d,1,16)
-        switch_pattern(pattern)
-      elseif enc_line == 5 then
-       pattern_to_copy = util.clamp(pattern_to_copy + d,1,16)
-      elseif enc_line == 6 then
-        params:delta("bpm", d)
+    if view.steps_engine then
+      local p = is_lock()
+      
+      if data.selected[2] then 
+        data[data.pattern][tr].params[s].lock = 1 
+      end 
+      
+      step_params[data.ui_index](tr, p, d)
+      
+    elseif view.sampling then
+      
+      sampling_params[data.ui_index](d)
+    end
+  end
+end
+
+function key(n,z)
+  if n == 1 then 
+    K1_hold = z == 1 and true or false
+    if z == 1 and not view.sampling then 
+      data.ui_index = -3
+    elseif z == 0 and not view.sampling then  
+      data.ui_index = 1
+    end
+  end
+
+  if n == 2 and z == 1 then
+
+  elseif n == 3 then
+    if view.sampling then
+      if data.ui_index == 1 and z == 1  then
+        data.sampling.rec = not data.sampling.rec
+        engines.rec(data.sampling.rec)
+      elseif data.ui_index == 2 or data.ui_index == 4 or data.ui_index == 5 then
+        data.sampling.play = not data.sampling.play
+        engines.play(z == 1 and true or false)
+      elseif data.ui_index == 3 and z == 1  then
+        data.sampling.play = false
+        data.sampling.rec = false
+        engines.play(false)
+        engines.rec(false)
+        engines.save_and_load(data.sampling.slot)
+      elseif data.ui_index == 6  and z == 1 then
+        engines.clear()
       end
-    elseif lockeditmode == false then
-      if not alttrackeditmode then
-        if enc_line > 0 then
-          params:delta(disptrack..lock_params[enc_line], enc_line == 1 and d / 10 or d)
-        end
-      elseif alttrackeditmode then
-        params:delta((enc_line < 7 and disptrack or "" )..alt_lock_params[enc_line],d)
-      end
-    elseif lockeditmode == true  then
-      local max_clamp = {5,1,1,12,0,0,0,20000,100,16,16,100,16,100,16}
-      local min_clamp = {0.01,0.01,0,0.01,-60,-60,-60,0,0,0,1,0,0,0,0}
-      local delta_mult = {0.01,0.01,0.01,0.1,1,1,1,100,0.01,0.01,1,1,1,1,1}
-      local line = data[pattern].locks[lock_params[util.clamp(enc_line,1,#engine_params)]][voice_lock][step_lock]
-      if enc_line < 10 then
-        if data[pattern].locks[lock_params[enc_line]][voice_lock][step_lock] == 0 then
-          line = params:get(voice_lock .. lock_params[enc_line])
-        end
-      end
-      if enc_line <= 9 then
-        data[pattern].locks[lock_params[enc_line]][voice_lock][step_lock] = util.clamp(line + d * delta_mult[enc_line],min_clamp[enc_line],max_clamp[enc_line])
-      elseif enc_line > 9 then
-        data[pattern][tablenames[enc_line - 9]][voice_lock][step_lock] = util.clamp(data[pattern][tablenames[enc_line - 9]][voice_lock][step_lock] + d, min_clamp[enc_line],max_clamp[enc_line])
+    else
+      if data.ui_index == 1 then
+        open_sample_settings()
       end
     end
   end
-  redraw()
 end
 
 function redraw()
-  if mainmenu then
-    screen.clear()
-    draw_bar()
-    for i=1,VOICES do
-      screen.level(enc_line == i and 15 or i == 5 and 1 or i == 1 and 0 or i == 3 and 1 or 2 )
-      if i == 1 then
-        screen.move(2,8)
-        screen.text(data.name == nil and (project .. ": UNTITLED") or (project .. ": "..data.name))
-      elseif i <= 3 then
-        screen.move(i == 2 and i or i + 35, 20)
-        screen.text(i == 2 and "LOAD: " .. project_to_load or i == 3 and "SAVE TO: " .. project_to_save)
-      elseif i == 4 then
-        screen.move(2,30)
-        screen.text("PATTERN: " .. pattern )
-      elseif i == 5 then
-        screen.move(50,30)
-        screen.text("COPY TO: " .. pattern_to_copy)
-      end
-    end
-  elseif alttrackeditmode and (not trackeditmode or not lockeditmode) then
-    screen.clear()
-    draw_bar()
-    for i=1,#ui_alt_menu do
-      if i == enc_line then screen.level(15) else screen.level(2) end
-      screen.move(i == 6 and 47 or i <= 6 and 2 or 62 ,(i <= 6 and i * 9 or  (i - 6 ) * 9) + (10))
-      if i == 6 then screen.text_right(ui_alt_menu[i]..params:string(disptrack..alt_lock_params[i]))
-      elseif i < 7 then
-        screen.text(ui_alt_menu[i]..params:string(disptrack..alt_lock_params[i]))
-      else
-        screen.text(ui_alt_menu[i]..params:string(alt_lock_params[i]))
-      end
-    end
-  elseif trackeditmode and not lockeditmode then
-    screen.clear()
-    draw_bar()
-    for i=1,#ui_menu do
-      if i == enc_line then screen.level(15) else screen.level(2) end
-      screen.move(i <= 6 and 2 or 62 ,(i <= 6 and i * 9 or  (i - 6 ) * 9) + (10))
-      if last_val[disptrack][i] ~= nil and i ~= enc_line and val[disptrack][i] ~= 0 then
-        screen.level(1)
-        screen.text(ui_lock_menu[i] .. util.round(last_val[disptrack][i] * (i == 4 and 1000 or i <  4 and 100 or i == 8 and 0.1 or i == 9 and 100 or i >= 7 and 1 or 1)).. disp_meters[i])
-      else
-        screen.text(ui_menu[i]..params:string(disptrack..lock_params[i]))
-      end
-    end
-  else
-    local disp_meters = {" %"," %"," ms", " ms"," dB",  " dB", " dB", " Hz", " %","","","%","",""}
-    local thresholds  = {0,1,100,0,0}
-    screen.clear()
-    draw_bar()
-    for i=1,#ui_lock_menu do
-      if i == enc_line then screen.level(15) else screen.level(1) end
-      screen.move(i == 11 and 90 or i <= 6 and 2 or 62 , i== 13 and 64 or i== 12 and 55 or i == 11 and 46 or (i <= 6 and i * 9 or  (i - 6 ) * 9) + (10))
-      if data[pattern].locks[lock_params[util.clamp(i,1,9)]][voice_lock][step_lock] ~= 0 and i < 10 then
-        local line = data[pattern].locks[lock_params[i]][voice_lock][step_lock]
-        screen.level(enc_line == i and 16 or 4)
-        if i <= 9 then
-          screen.text(ui_lock_menu[i] .. util.round(line * (i == 4 and 1000 or i <  4 and 100 or i == 9 and 100 or i >= 7 and 1 or 1)) .. disp_meters[i])
-          end
-      elseif i > 9 then
-        if data[pattern][tablenames[i - 9]][voice_lock][step_lock] ~= thresholds[i - 9] then
-          screen.level(enc_line == i and 16 or 4) end
-          screen.text(ui_lock_menu[i] .. data[pattern][tablenames[i - 9]][voice_lock][step_lock] ..disp_meters[i])
-      else
-        screen.text(ui_lock_menu[i] .. params:string(voice_lock .. lock_params[util.clamp(i,1,9)]))
-      end
-    end
+  local pos = util.round( counter / 16 )
+  
+  --local src = is_lock()
+  local tr = data.selected[1]
+  local params_data = get_params(data.selected[1])
+
+  local lockd = data[data.pattern][tr].params[data[data.pattern].track.p_pos[tr]]
+  
+  if data.selected[2] then
+    params_data = get_params(data.selected[1], data.selected[2], true)
+  elseif lockd and lockd.lock  == 1 then 
+    params_data = get_params(data.selected[1], data[data.pattern].track.p_pos[data.selected[1]], true)
   end
+
+  screen.clear()
+  
+  ui.head(params_data, data, view)-- , data.pattern, data.selected, data[data.pattern].track, data, data.ui_index)
+  --if view.steps_engine then ui.sample_screen(params_data, data) end
+  if view.sampling then 
+    ui.sampling(params_data, data, engines.get_pos(), engines.get_len(), engines.get_state()) 
+  else
+    ui.sample_screen(params_data, data)
+  end
+
   screen.update()
+
 end
 
+local controls = {
+  [1] = function(z) -- start / stop, 
+      if z == 1 then
+        if sequencer_metro.is_running then 
+          sequencer_metro:stop() 
+          midi_clock:stop()
+          if MOD then engine.noteOffAll() end
+        else 
+          sequencer_metro:start() 
+          midi_clock:start()
+        end
+        if MOD then
+            for i = 1, 7 do
+              data[data.pattern].track.pos[i] = 0
+              data[data.pattern].track.p_pos[i] = 0
+            end
+        end
+      end
+    end,
+  [5] = function(z) set_view('steps_engine') end,
+  [7] = function(z) if z == 1 then set_view(view.sampling and 'steps_engine' or 'sampling') end  end,
+  [9] = function(z) if z == 1 then set_view(view.patterns and 'steps_engine' or 'patterns') end end,
+  [12] = function(z) MOD = z == 1 and true or false  if z == 0 then copy = { false, false } end  end,
+  [15] = function(z) ALT = z == 1 and true or false end,
+  [16] = function(z) SHIFT = z == 1 and true or false end,
+}
+
+function g.key(x, y, z)
+  screen.ping()
+  
+  if y < 8 then
+    local held
+    local cond = have_substeps(y, x) 
+
+    if z==1 and hold[y] then
+      holdmax[y] = 0
+    end
+    hold[y] = hold[y] + (z * 2 - 1)
+    if hold[y] > holdmax[y] then
+      holdmax[y] = hold[y]
+    end
+
+      if view.steps_engine or view.sampling then
+      
+      if SHIFT then
+        
+        if z == 1 then
+          if x == 16 then
+            data[data.pattern].track.mute[y] = not data[data.pattern].track.mute[y]
+            if data[data.pattern].track.mute[y] then 
+
+              engine.noteOff(choke[y])
+            end
+          else
+            data[data.pattern].track.div[y] = x
+            sync_tracks()
+          end
+        end
+        
+      elseif ALT then 
+        
+          if hold[y] == 1 then
+            first[y] = x
+          elseif hold[y] == 2 then
+            second[y] = x
+            set_loop(y, first[y], second[y])
+          end
+      elseif MOD then
+        if not copy[1] then 
+          copy = { y, x }
+          tab.print(copy)
+        else
+          copy_step(copy, {y, x})
+        end
+      else 
+     
+        cond = have_substeps(y, x) 
+        data.selected = { y, z == 1 and x or false }
+        if not data.selected[2] and data.ui_index < 1 then data.ui_index = 1 end
+
+       if z == 1 then
+        
+          down_time = util.time()
+          --if not cond then
+            --reset_params(y, x)
+          --end
+        else
+          
+          hold_time = util.time() - down_time
+          held = hold_time > 0.2 and true or false
+          
+          if not cond then
+            
+            data[data.pattern][y][get_step(x)] = 1
+
+          elseif cond and not held then
+
+            --data[data.pattern][y].params[x].lock = false
+
+            clear_substeps(y, x)
+            data[data.pattern][y].params[x] = data[data.pattern][y].params['TR'..y]
+            data.selected = { y, false }
+    
+          end
+        end        
+      end
+      
+      
+    elseif view.patterns then
+      if y == 1 and z == 1 then
+        data.pattern = x
+      end
+    end
+  
+  else
+    
+    if controls[x] then
+      controls[x](z)
+    end
+    
+  end
+  
+end
+
+function g.redraw() 
+  g:all(0)
+  
+  
+  for y = 1, 7 do 
+    for x = 1, 16 do 
+      if not view.patterns then
+        if SHIFT then
+          
+            g:led(data[data.pattern].track.div[y], y, 15)
+            g:led(16, y, data[data.pattern].track.mute[y] and 15 or 6 )
+
+        elseif ALT then
+          
+            local t_start = get_tr_start(y)
+            local t_len  = get_tr_len(y)
+            if x >= t_start and x <= t_len then
+              g:led(x, y, 3)
+            end
+
+          
+        else
+          
+          local p = (x * 16) - 15
+          for s = 0, 15 do
+            if data[data.pattern][y][p + s] == 1 then
+              local level = data.selected[1] == y and data.selected[2] == x and 15 or 10
+              g:led(x, y, level ) 
+            end
+          end
+          
+        end
+      else
+        
+        for i = 1, 16 do
+          g:led(i, 1, data.pattern == i and 15 or 6)
+        end
+      end
+    end 
+  end
+  
+  if sequencer_metro.is_running and not view.patterns  and not SHIFT then
+    for i = 1, 7 do
+      local pos = math.ceil(data[data.pattern].track.pos[i] / 16)
+      if not data[data.pattern].track.mute[i] then g:led(pos, i, 6 ) end
+    end
+  end
+  
+  
+  g:led(1, 8, sequencer_metro.is_running and 15 or 6 )
+  g:led(5, 8, view.steps_engine and 15  or  6)
+  g:led(7, 8, view.sampling and 15 or 6)
+  g:led(9, 8, view.patterns and 15 or 6)
+
+  g:led(12, 8, MOD and util.clamp(blink,5,15) or 6 )
+  g:led(15, 8, ALT and util.clamp(blink,5,15)  or 6 )
+  g:led(16, 8, SHIFT and util.clamp(blink,5,15)  or 6 )
+  
+  
+  g:refresh()
+end

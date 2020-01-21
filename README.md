@@ -1,2 +1,2 @@
-# takt
-parameter locking step sequencer for monome norns 
+# 2akt
+parameter locking step sequencer (take two)
