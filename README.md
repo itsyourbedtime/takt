@@ -1,2 +1,2 @@
-# 2akt
-parameter locking step sequencer (take two)
+# takt
+parameter locking step sequencer
