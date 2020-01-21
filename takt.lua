@@ -61,13 +61,13 @@ local rule = {
   [8] = { 'PREV', function(tr, step) return data[data.pattern][tr].params[step - 1].playing end },
   [9] = { 'NEXT', function(tr, step) return data[data.pattern][tr].params[step + 1].playing end },
   
-  [10] = {'EVERY 2', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 2 == 0 and true or false  end },
-  [11] = {'EVERY 3', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 3 == 0 and true or false  end },
-  [12] = {'EVERY 4', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 4 == 0 and true or false  end },
-  [13] = {'EVERY 5', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 5 == 0 and true or false  end },
-  [14] = {'EVERY 6', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 6 == 0 and true or false  end },
-  [15] = {'EVERY 7', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 7 == 0 and true or false  end },
-  [16] = {'EVERY 8', function(tr, step) print(data[data.pattern].track.cycle[tr]) return data[data.pattern].track.cycle[tr] % 8 == 0 and true or false  end },
+  [10] = {'EVERY 2', function(tr, step) return data[data.pattern].track.cycle[tr] % 2 == 0 and true or false  end },
+  [11] = {'EVERY 3', function(tr, step) return data[data.pattern].track.cycle[tr] % 3 == 0 and true or false  end },
+  [12] = {'EVERY 4', function(tr, step) return data[data.pattern].track.cycle[tr] % 4 == 0 and true or false  end },
+  [13] = {'EVERY 5', function(tr, step) return data[data.pattern].track.cycle[tr] % 5 == 0 and true or false  end },
+  [14] = {'EVERY 6', function(tr, step) return data[data.pattern].track.cycle[tr] % 6 == 0 and true or false  end },
+  [15] = {'EVERY 7', function(tr, step) return data[data.pattern].track.cycle[tr] % 7 == 0 and true or false  end },
+  [16] = {'EVERY 8', function(tr, step) return data[data.pattern].track.cycle[tr] % 8 == 0 and true or false  end },
   
   
 }
@@ -170,9 +170,10 @@ local function copy_step(src, dst)
     for i = 0, 15 do
       data[data.pattern][dst[1]][get_step(dst[2]) + i] = data[data.pattern][src[1]][get_step(src[2]) + i]
     end
+    
     data[data.pattern][dst[1]].params[dst[2]] = data[data.pattern][src[1]].params[src[2]]
     
-    data[data.pattern][dst[1]].params[dst[2]]  = simplecopy(data[data.pattern][src[1]].params[src[2]])
+    --data[data.pattern][dst[1]].params[dst[2]]  = simplecopy(data[data.pattern][src[1]].params[src[2]])
 end
 
 local function get_params(tr, step, lock)
@@ -763,7 +764,7 @@ function g.key(x, y, z)
       elseif MOD then
         if not copy[1] then 
           copy = { y, x }
-          tab.print(copy)
+          --tab.print(copy)
         else
           copy_step(copy, {y, x})
         end
