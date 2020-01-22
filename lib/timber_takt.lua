@@ -179,7 +179,7 @@ local function sample_loaded(id, streaming, num_frames, num_channels, sample_rat
   
   local start_frame = params:get("start_frame_" .. id)
   local end_frame = params:get("end_frame_" .. id)
-  local by_length = params:get("by_length_" .. id)
+  --local by_length = params:get("by_length_" .. id)
   
   local start_frame_max = num_frames
   if streaming == 1 then
@@ -197,7 +197,7 @@ local function sample_loaded(id, streaming, num_frames, num_channels, sample_rat
     play_mode_param.count = #options.PLAY_MODE_STREAMING
   end
   
-  update_by_bars_options(id)
+  --update_by_bars_options(id)
   local duration = num_frames / sample_rate
 
   -- Set defaults
@@ -224,7 +224,7 @@ local function sample_loaded(id, streaming, num_frames, num_channels, sample_rat
     -- These need resetting after having their ControlSpecs altered
     params:set("start_frame_" .. id, start_frame)
     params:set("end_frame_" .. id, end_frame)
-    params:set("by_length_" .. id, by_length)
+    --params:set("by_length_" .. id, by_length)
     
     set_play_mode(id, lookup_play_mode(id))
   end
@@ -367,7 +367,7 @@ end
 local function move_copy_update(from_id, to_id)
   local ids = {from_id, to_id}
   for _, id in pairs(ids) do
-    update_by_bars_options(id)
+    --update_by_bars_options(id)
     --update_freq_multiplier(id)
     samples_meta[id].positions = {}
     samples_meta[id].playing = false
@@ -445,7 +445,7 @@ function Timber.copy_params(from_id, to_first_id, to_last_id, param_ids)
         local to_param = params:lookup_param(v .. "_" .. i)
         
         local exclude_controlspec = false
-        if v == "by_length" then exclude_controlspec = true end
+        --if v == "by_length" then exclude_controlspec = true end
         to_param = copy_param(from_param, to_param, exclude_controlspec)
       end
       
