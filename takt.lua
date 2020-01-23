@@ -43,36 +43,6 @@ local data = {
 
 }
 
-local locks_defaults =  {
-    rev = 1,
-    playing = true,
-    offset = 0,
-    sample = 1,
-    note = 60,
-    retrig = 0,
-    mode = 3,
-    start = 0,
-    s_end = 999999,
-    vol = 0,
-    pan = 0,
-    attack = 0,
-    decay = 1,
-    sustain = 1,
-    release = 0,
-    ftype = 1,
-    cutoff = 20000,
-    resonance = 0,
-    sr = 4,
-    freq_lfo1 = 0,
-    freq_lfo2 = 0,
-    amp_lfo1 = 0,
-    amp_lfo2 = 0,
-    cut_lfo1 = 0,
-    cut_lfo2 = 0,
-    lock = 0,
-    rule = 0,
-    retrig = 0,
-}
 
 local view = { steps_engine = true, sampling = false, patterns = false } 
 
@@ -102,10 +72,24 @@ local rule = {
   
 }
 
+local function deepcopy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in next, orig, nil do
+            copy[deepcopy(orig_key)] = deepcopy(orig_value)
+        end
+        setmetatable(copy, deepcopy(getmetatable(orig)))
+    else -- number, string, boolean, etc
+        copy = orig
+    end
+    return copy
+end
+
 local function set_bpm(n)
     data[data.pattern].bpm = n
     sequencer_metro.time = 60 / data[data.pattern].bpm  / 16 --[[ppqn]] / 4 
-    engines.set_bpm(data[data.pattern].bpm)
     midi_clock:bpm_change(data[data.pattern].bpm)
 end
 
@@ -119,8 +103,20 @@ local function load_project(pth)
     local saved = tab.load(pth)
     if saved ~= nil then
       print("data found")
-      for k,v in pairs(saved[2]) do data[k] = v end
-      set_bpm(saved[2].bpm)
+      for k,v in pairs(saved[2]) do 
+        data[k] = v 
+      end
+      
+      for t = 1, 16 do
+        for l = 1, 7 do
+          for k = 1, 16 do
+            data[t][l].params[k] = saved[2][t][l].params[k]
+           setmetatable(data[t][l].params[k], {__index =  data[t][l].params['TR'..l]})
+          end
+        end
+      end
+      
+      
       if saved[1] then params:read(norns.state.data .. saved[1] .. ".pset") end
     else
       print("no data")
@@ -189,27 +185,9 @@ local function copy_step(src, dst)
     end
 end
 
-local function deepcopy(orig)
-    local orig_type = type(orig)
-    local copy
-    if orig_type == 'table' then
-        copy = {}
-        for orig_key, orig_value in next, orig, nil do
-            copy[deepcopy(orig_key)] = deepcopy(orig_value)
-        end
-        setmetatable(copy, deepcopy(getmetatable(orig)))
-    else -- number, string, boolean, etc
-        copy = orig
-    end
-    return copy
-end
-
-
 local function copy_pattern(src, dst)
     data[dst] = deepcopy(data[src])
 end
-
-
 
 local function get_params(tr, step, lock)
     if not step then
@@ -288,7 +266,7 @@ end
 
 
 local function metaseq(counter)
-    if (counter / 16 ) % 16 == 0 then
+    if counter % 256 == 0 then
       data.pattern = data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from
     end
 end
@@ -304,7 +282,7 @@ local function seqrun(counter)
 
         data[data.pattern].track.pos[tr] = util.clamp((data[data.pattern].track.pos[tr] + 1) % (len ), start, len) -- voice pos
         data[data.pattern].track.p_pos[tr] = math.ceil(data[data.pattern].track.pos[tr] / 16)
-        data[data.pattern].track.cycle[tr] = data[data.pattern].track.p_pos[tr] <= len / 16 and data[data.pattern].track.cycle[tr] + 1 or 0--data[data.pattern].track.cycle[tr]
+        data[data.pattern].track.cycle[tr] = counter % 256 == 0 and data[data.pattern].track.cycle[tr] + 1 or data[data.pattern].track.cycle[tr]  --data[data.pattern].track.cycle[tr]
 
         local mute = data[data.pattern].track.mute[tr]
         
@@ -313,8 +291,6 @@ local function seqrun(counter)
           local step_param
           local play = true
            
-          
-          
           if get_params(tr, data[data.pattern].track.p_pos[tr]).lock == 1 then
             step_param = get_params(tr, data[data.pattern].track.p_pos[tr])
             set_locks(step_param)
@@ -441,9 +417,40 @@ function init()
   
         data[t][l] = {}
         data[t][l].params = {}
-        data[t][l].params['TR'.. l] = {}
-        setmetatable(data[t][l].params['TR'.. l], { __index = locks_defaults })
-        data[t][l].params['TR'.. l].sample = l
+        data[t][l].params['TR'.. l] = {
+        rev = 1,
+        playing = true,
+        offset = 0,
+        sample = l,
+        note = 60,
+        retrig = 0,
+        mode = 3,
+        start = 0,
+        s_end = 999999,
+        vol = 0,
+        pan = 0,
+        attack = 0,
+        decay = 1,
+        sustain = 1,
+        release = 0,
+        ftype = 1,
+        cutoff = 20000,
+        resonance = 0,
+        sr = 4,
+        freq_lfo1 = 0,
+        freq_lfo2 = 0,
+        amp_lfo1 = 0,
+        amp_lfo2 = 0,
+        cut_lfo1 = 0,
+        cut_lfo2 = 0,
+        lock = 0,
+        rule = 0,
+        retrig = 0,
+    }
+    
+    
+ --       setmetatable(data[t][l].params['TR'.. l], { __index = locks_defaults })
+   --     data[t][l].params['TR'.. l].sample = l
         
         for i=0,256 do
           data[t][l][i] = 0

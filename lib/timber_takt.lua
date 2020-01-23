@@ -598,7 +598,7 @@ osc.event = Timber.osc_event
 
 function Timber.set_bpm(bpm)
   Timber.bpm = bpm
-  update_by_bar_multipliers()
+  --update_by_bar_multipliers()
 end
 
 

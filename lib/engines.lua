@@ -22,11 +22,6 @@ unrequire("lib/timber_takt")
 local Timber = include("lib/timber_takt")
 engine.name = "Timber_Takt"
 
-engines.set_bpm = function(bpm)
-    Timber.set_bpm(bpm)
-end
-
-
 function engines.load_folder(file, add)
   
   local sample_id = 0
