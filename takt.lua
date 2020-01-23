@@ -43,19 +43,6 @@ local data = {
 
 }
 
-local pattern_defaults = {
-        bpm = 120,
-        track = {
-            mute = { false, false, false, false, false, false, false },
-            pos = { 0, 0, 0, 0, 0, 0, 0 },
-            p_pos =  { 0, 0, 0, 0, 0, 0, 0 },
-            start =  { 1, 1, 1, 1, 1, 1, 1 },
-            len = { 256, 256, 256, 256, 256, 256, 256 },
-            div = { 1, 1, 1, 1, 1, 1, 1 },
-            cycle = {1, 1, 1, 1, 1, 1, 1 },
-          },
-    }
-
 local locks_defaults =  {
     rev = 1,
     playing = true,
@@ -302,7 +289,7 @@ end
 
 local function metaseq(counter)
     if (counter / 16 ) % 16 == 0 then
-      data.pattern = util.clamp(data.pattern, data.metaseq.from, data.metaseq.to) % data.metaseq.to  + 1
+      data.pattern = data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from
     end
 end
 
@@ -436,9 +423,20 @@ function init()
 
 
     for t = 1, 16 do
-      data[t] = {}
-      setmetatable(data[t], {__index = pattern_defaults })
-      
+      data[t] = {
+        bpm = 120,
+        track = {
+            mute = { false, false, false, false, false, false, false },
+            pos = { 0, 0, 0, 0, 0, 0, 0 },
+            p_pos =  { 0, 0, 0, 0, 0, 0, 0 },
+            start =  { 1, 1, 1, 1, 1, 1, 1 },
+            len = { 256, 256, 256, 256, 256, 256, 256 },
+            div = { 1, 1, 1, 1, 1, 1, 1 },
+            cycle = {1, 1, 1, 1, 1, 1, 1 },
+          },
+    }
+
+
       for l = 1, 7 do
   
         data[t][l] = {}
