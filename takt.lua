@@ -18,6 +18,7 @@ local blink = 1
 local ALT, SHIFT, MOD = false, false, false
 local hold, holdmax, first, second = {}, {}, {}, {}
 local copy = { false, false }
+local ptn_copy = false
 
 local g = grid.connect()
 
@@ -38,6 +39,52 @@ local data = {
     slot = 1, 
   },
 
+  metaseq = { from = 1, to = 1 },
+
+}
+
+local pattern_defaults = {
+        bpm = 120,
+        track = {
+            mute = { false, false, false, false, false, false, false },
+            pos = { 0, 0, 0, 0, 0, 0, 0 },
+            p_pos =  { 0, 0, 0, 0, 0, 0, 0 },
+            start =  { 1, 1, 1, 1, 1, 1, 1 },
+            len = { 256, 256, 256, 256, 256, 256, 256 },
+            div = { 1, 1, 1, 1, 1, 1, 1 },
+            cycle = {1, 1, 1, 1, 1, 1, 1 },
+          },
+    }
+
+local locks_defaults =  {
+    rev = 1,
+    playing = true,
+    offset = 0,
+    sample = 1,
+    note = 60,
+    retrig = 0,
+    mode = 3,
+    start = 0,
+    s_end = 999999,
+    vol = 0,
+    pan = 0,
+    attack = 0,
+    decay = 1,
+    sustain = 1,
+    release = 0,
+    ftype = 1,
+    cutoff = 20000,
+    resonance = 0,
+    sr = 4,
+    freq_lfo1 = 0,
+    freq_lfo2 = 0,
+    amp_lfo1 = 0,
+    amp_lfo2 = 0,
+    cut_lfo1 = 0,
+    cut_lfo2 = 0,
+    lock = 0,
+    rule = 0,
+    retrig = 0,
 }
 
 local view = { steps_engine = true, sampling = false, patterns = false } 
@@ -145,22 +192,37 @@ local function set_loop(tr, start, len)
     data[data.pattern].track.len[tr] = get_step(len) + 15
 end
 
-local function simplecopy(obj)
-  if type(obj) ~= 'table' then return obj end
-  local res = {}
-  for k, v in pairs(obj) do
-    res[k] = v
-  end
-  return res
-end
-
 local function copy_step(src, dst)
     for i = 0, 15 do
       data[data.pattern][dst[1]][get_step(dst[2]) + i] = data[data.pattern][src[1]][get_step(src[2]) + i]
     end
-    
-    data[data.pattern][dst[1]].params[dst[2]] = data[data.pattern][src[1]].params[src[2]]
+
+    for k,v in pairs(data[data.pattern][src[1]].params[src[2]]) do
+      data[data.pattern][dst[1]].params[dst[2]][k]  = v
+    end
 end
+
+local function deepcopy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in next, orig, nil do
+            copy[deepcopy(orig_key)] = deepcopy(orig_value)
+        end
+        setmetatable(copy, deepcopy(getmetatable(orig)))
+    else -- number, string, boolean, etc
+        copy = orig
+    end
+    return copy
+end
+
+
+local function copy_pattern(src, dst)
+    data[dst] = deepcopy(data[src])
+end
+
+
 
 local function get_params(tr, step, lock)
     if not step then
@@ -237,6 +299,13 @@ local function set_locks(step_param)
     end
 end
 
+
+local function metaseq(counter)
+    if (counter / 16 ) % 16 == 0 then
+      data.pattern = util.clamp(data.pattern, data.metaseq.from, data.metaseq.to) % data.metaseq.to  + 1
+    end
+end
+
 local function seqrun(counter)
 
   for tr = 1, 7 do
@@ -244,7 +313,7 @@ local function seqrun(counter)
       local start = data[data.pattern].track.start[tr]
       local len = data[data.pattern].track.len[tr]
 
-      if counter % data[data.pattern].track.div[tr] == 0 then
+      if counter % data[data.pattern].track.div[tr]== 0 then
 
         data[data.pattern].track.pos[tr] = util.clamp((data[data.pattern].track.pos[tr] + 1) % (len ), start, len) -- voice pos
         data[data.pattern].track.p_pos[tr] = math.ceil(data[data.pattern].track.pos[tr] / 16)
@@ -364,74 +433,35 @@ function init()
     end
 
 
-  for t = 1, 16 do
-    data[t] = {
-        bpm = 120,
-        track = {
-            mute = { false, false, false, false, false, false, false },
-            pos = { 0, 0, 0, 0, 0, 0, 0 },
-            p_pos =  { 0, 0, 0, 0, 0, 0, 0 },
-            start =  { 1, 1, 1, 1, 1, 1, 1 },
-            len = { 256, 256, 256, 256, 256, 256, 256 },
-            div = { 1, 1, 1, 1, 1, 1, 1 },
-            cycle = {1, 1, 1, 1, 1, 1, 1 },
-          },
-    }
-    
-    for l = 1, 7 do
 
-      data[t][l] = {}
 
-      data[t][l].params = {}
+    for t = 1, 16 do
+      data[t] = {}
+      setmetatable(data[t], {__index = pattern_defaults })
       
-      data[t][l].params['TR'.. l] = {
-            rev = 1,
-            playing = true,
-            offset = 0,
-            sample = l,
-            note = 60,
-            retrig = 0,
-            mode = 3,
-            start = 0,
-            s_end = 999999,
-            vol = 0,
-            pan = 0,
-            attack = 0,
-            decay = 1,
-            sustain = 1,
-            release = 0,
-            ftype = 1,
-            cutoff = 20000,
-            resonance = 0,
-            sr = 4,
-            freq_lfo1 = 0,
-            freq_lfo2 = 0,
-            amp_lfo1 = 0,
-            amp_lfo2 = 0,
-            cut_lfo1 = 0,
-            cut_lfo2 = 0,
-            lock = 0,
-            rule = 0,
-            retrig = 0,
-        }
+      for l = 1, 7 do
+  
+        data[t][l] = {}
+        data[t][l].params = {}
+        data[t][l].params['TR'.. l] = {}
+        setmetatable(data[t][l].params['TR'.. l], { __index = locks_defaults })
+        data[t][l].params['TR'.. l].sample = l
         
-      for i=0,256 do
-        data[t][l][i] = 0
+        for i=0,256 do
+          data[t][l][i] = 0
+        end
+        
+        for k = 1, 16 do
+          data[t][l].params[k] = {}
+         setmetatable(data[t][l].params[k], {__index =  data[t][l].params['TR'..l]})
+        end
       end
-    
-
-      for k = 1, 16 do
-        data[t][l].params[k] = {}
-       setmetatable(data[t][l].params[k], {__index =  data[t][l].params['TR'..l]})
-      end
-    
     end
-  end
   
 
     sequencer_metro = metro.init()
     sequencer_metro.time = 60 / data[data.pattern].bpm  / 16 --[[ppqn]] / 4 
-    sequencer_metro.event = function(stage) seqrun(stage) end
+    sequencer_metro.event = function(stage) seqrun(stage) metaseq(stage) end
 
     redraw_metro = metro.init(function(stage) redraw() g:redraw() blink = (blink + 1) % 17 end, 1/30)
     redraw_metro:start()
@@ -448,7 +478,7 @@ local sampling_params = {
   [-1] = function(d) data.sampling.mode = util.clamp(data.sampling.mode + d, 1, 4) engines.set_mode(data.sampling.mode) end,
   [0] = function(d) data.sampling.source = util.clamp(data.sampling.source + d, 1, 2) engines.set_source(data.sampling.source) end,
   [3] = function(d) data.sampling.slot = util.clamp(data.sampling.slot + d, 0, 99) end,
-  [4] = function(d) data.sampling.start = util.clamp(data.sampling.start + d / 10, 0, 60) engines.set_start(data.sampling.start)end,
+  [4] = function(d) data.sampling.start = util.clamp(data.sampling.start + d / 10, 0, 60) engines.set_start(data.sampling.start) end,
   [5] = function(d) data.sampling.length = util.clamp(data.sampling.length + d / 10, 0.1, 60) engines.set_length(data.sampling.length) end,
   [6] = function(d) end, --play
   [1] = function(d) end, --save
@@ -566,7 +596,7 @@ function enc(n,d)
   norns.encoders.set_sens(2,2)
   norns.encoders.set_accel(1, false)
   norns.encoders.set_accel(2, false)
-  norns.encoders.set_accel(3, false)
+  norns.encoders.set_accel(3, ((data.ui_index == 3 or data.ui_index == 4) and view.steps_engine) and true or false)
 
   local tr = data.selected[1]
   local s = data.selected[2] and data.selected[2] or 'TR' .. data.selected[1]
@@ -619,7 +649,9 @@ function key(n,z)
     if view.sampling then
       if data.ui_index == 1 and z == 1  then
         data.sampling.rec = not data.sampling.rec
+        if data.sampling.rec then data.sampling.start = 0 end
         engines.rec(data.sampling.rec)
+      
       elseif data.ui_index == 2 or data.ui_index == 4 or data.ui_index == 5 then
         data.sampling.play = not data.sampling.play
         engines.play(z == 1 and true or false)
@@ -631,6 +663,7 @@ function key(n,z)
         engines.save_and_load(data.sampling.slot)
       elseif data.ui_index == 6  and z == 1 then
         engines.clear()
+        data.sampling.start = 0
       end
     else
       if data.ui_index == 1 then
@@ -776,7 +809,33 @@ function g.key(x, y, z)
       
     elseif view.patterns then
       if y == 1 and z == 1 then
-        data.pattern = x
+        if MOD then 
+            
+            if not ptn_copy then 
+              ptn_copy = x
+            else
+              copy_pattern(ptn_copy, x)
+            end
+            
+            
+        else
+          
+          if hold[y] == 1 then
+            first[y] = x
+              
+            data.pattern = x
+            ptn_copy = false
+            data.metaseq.from = x
+            data.metaseq.to = x
+            
+          elseif hold[y] == 2 then
+            second[y] = x
+
+            data.metaseq.from = first[y]
+            data.metaseq.to = second[y]
+            
+          end
+        end
       end
     end
   
@@ -825,7 +884,14 @@ function g.redraw()
       else
         
         for i = 1, 16 do
-          g:led(i, 1, data.pattern == i and 15 or 6)
+          
+          local level =
+          data.pattern == i and sequencer_metro.is_running and  util.clamp(blink, 5, 14)
+          or (i >= data.metaseq.from and i <= data.metaseq.to) and 9 
+          or data.pattern == i and 15 
+          or 3
+          
+          g:led(i, 1, level) -- data.pattern == i and 15 or 6)
         end
       end
     end 

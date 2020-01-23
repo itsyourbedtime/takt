@@ -167,8 +167,8 @@ end
 
 function ui.draw_env(x, y, t, params_data, ui_index)
     local atk, dec, sus, rel
-    atk = util.clamp(params_data.attack, 0, 4)
-    dec = params_data.decay
+    atk = params_data.attack
+    dec = params_data.decay+ 0.4
     sus = params_data.sustain
     rel = params_data.release
     
@@ -180,34 +180,24 @@ function ui.draw_env(x, y, t, params_data, ui_index)
     screen.rect(x - 1, y - 15, 40, 16)
     screen.stroke()
     
-    screen.level(1)
+    
+    screen.level(ui_index == 9 and 15 or 1)
     screen.move(x,y)
     screen.line(attack_peak, y - 14)
     screen.stroke()
-    
+    screen.level(ui_index == 10 and 15 or 1)
     screen.move(attack_peak, y - 14)
-    screen.line(x + (dec) * 3 + 2, sy)
-
-    screen.move(x + (dec) * 3 + 2, sy)
+    screen.line(x + ((atk / 2) + dec) * 3 + 2, sy)
+    screen.stroke()
+    screen.level(ui_index == 11 and 15 or 1 )
+    screen.move(x + ((atk / 2) + dec) * 3 + 2, sy)
     screen.line(util.clamp(x + (rel) * 3 + 24, 0,  x+38), sy )
-
+    screen.stroke()
+    screen.level(ui_index == 12 and 15 or 1)
     screen.move(util.clamp(x + ( rel) * 3 + 24, 2, x+38), sy)
     screen.line(util.clamp(x + ( rel) * 2 + 38, 0, x+38), y)
     screen.stroke()
   
-    screen.level(15)
-    if ui_index == 9 then 
-      screen.pixel((x + atk * 2 ), y - 14) 
-    elseif ui_index == 10 then 
-      screen.pixel(x + (dec) * 3 + 2, sy - 1) 
-    elseif ui_index == 11 then 
-      --screen.pixel(x + (dec ) * 2 + (17 - atk), sy - 1) 
-      screen.pixel(util.clamp(x + (rel) * 3 + 19, 0, x + 37), sy -1) 
-    elseif ui_index == 12 then 
-      screen.pixel(util.clamp(x + (rel) * 3 + 24, 0, x + 37), sy -1) 
-    end
-    screen.stroke() 
-
 end
 
 function ui.draw_filter(x, y, params_data, ui_index)
@@ -223,45 +213,29 @@ function ui.draw_filter(x, y, params_data, ui_index)
 
     screen.level(1)
     if params_data.ftype == 1 then
-        local t = util.clamp(x + cut * 2, x + 9, x + 34)
+        local t = x + cut * 2
+        screen.level(ui_index == 17 and 15 or 1)
         screen.move(x - 1, y - 9)
-        screen.line(t - 10, y - 9)
-        screen.move(t - 10, y - 9)
-        screen.line(t + 2, y - 9 - (res * 4))
-        screen.move(t + 2, y - 9 - (res * 4))
+        screen.line(t + 2, y - 9 - (res * 5))
+        screen.stroke()
+        screen.level(ui_index == 18 and 15 or 1)
+        screen.move(t + 2, y - 9 - (res * 5))
         screen.line(t + 4, y)
         screen.stroke()
         
-        screen.level(15) 
-        if ui_index == 17 then 
-          screen.pixel(t - 10, y - 10)
-        elseif ui_index == 18 then 
-          screen.pixel(t + 2, y - 10 - (res * 4)) 
-        end
-    
-    screen.stroke() 
 
   elseif params_data.ftype == 2 then
-        cut =  10 - cut
-        local t = util.clamp((x + cut * 2),x , x + 33)
+        cut =  17 - cut
+        local t = x + cut * 2
+        screen.level( ui_index == 18 and 15 or 1)
         screen.move(t - 1, y)
-        screen.line(t + 1 , y - 9 - (res * 4))
-        screen.move(t  + 1 , y - 9 - (res * 4))
-        screen.line(t  + (38 - util.clamp((cut * 2), 0, 33)), y - 9)
-         
-          screen.stroke()
-          screen.level(15) 
-          if ui_index == 17 then 
-            screen.pixel(t,y - 9)
-          elseif ui_index == 18 then 
-            screen.pixel(t + 3, y - 9 - (res * 4)) 
-          end
-    
-    screen.stroke() 
-
-     
-      
-    end
+        screen.line(t + 1 , y - 9 - (res * 5))
+        screen.stroke()
+        screen.move(t  + 1 , y - 9 - (res * 5))
+        screen.level(ui_index == 17 and 15 or 1)
+        screen.line(t  + (38 - (cut * 2)), y - 9)
+        screen.stroke()
+  end
     
 
 end
@@ -390,6 +364,32 @@ function ui.draw_note(x, y, params_data, ui_index, count, lock)
  
 end
 
+function ui.draw_pan(x, y, params_data, ui_index, menu_index, lock)
+  set_brightness(menu_index, ui_index)
+  screen.rect(x,  y, 20, 17)
+  screen.fill()
+
+  local offset = 0
+  if count then offset = 2 end
+  screen.level(0)
+  screen.move(x + 9, y + 7)
+  screen.text_center('PAN')
+  
+  local pan = params_data.pan * 5
+
+  
+  local lvl = lock == true and 15 or 0 --
+
+  screen.move(x + 4, y + 13)
+  screen.line(x + 15, y + 13)
+  screen.stroke()
+  screen.level(lvl)
+  screen.rect(x + 9 + pan, y + 10, 1, 5)
+
+  screen.fill()
+ 
+end
+
 
 function ui.tile(index, name, value, ui_index, lock)
   
@@ -405,17 +405,17 @@ function ui.tile(index, name, value, ui_index, lock)
   set_brightness(index, ui_index)
   screen.rect(x , y,  20, 17)
   screen.fill()
-  screen.level(0) --- disp lock
+  screen.level(0) 
   screen.move( x  + 10, y + 7)
   screen.text_center(name)
   screen.move( x  + 10,y + 15)
+  
   local lvl = lock == true and 15 or 0 --
-  
-  
   screen.level(lvl)
+  
   if (index == 3 or index == 4) and type(value) == 'number' then value = util.round(value / 10000, 0.1) end
   if type(value) == 'number' then value = util.round(value, value % 1 == 0 and 1 or 0.1) end
-  
+  if string.len(tostring(value)) > 4 then value = util.round(value, 1) end
   
   screen.text_center(value)
   screen.stroke()
@@ -450,18 +450,18 @@ function ui.sample_screen(params_data, data)
       {2, 'NOTE', function(_, _, lock) ui.draw_note(22, 8, params_data, data.ui_index, false, lock) end },
       {3, 'STRT', params_data.start },
       {4, 'END',   params_data.s_end }, -- function() ui.draw_mode(67, 23, params_data.rev, data.ui_index) end },
-      {5, 'LFO1', params_data.freq_lfo1 },
-      {6, 'LFO2', params_data.freq_lfo2 },
+      {5, 'FM1', params_data.freq_lfo1 },
+      {6, 'FM2', params_data.freq_lfo2 },
       {7, 'VOL', params_data.vol },
-      {8, 'PAN', params_data.pan },
+      {8, 'PAN', function(_, _, lock) ui.draw_pan(22, 26, params_data, data.ui_index, 8, lock) end},--params_data.pan },
       {9, 'ENV', function(lock)  ui.draw_env(45, 42, 'AMP', params_data, data.ui_index) end },
-      {13, 'LFO1', params_data.amp_lfo1 },
-      {14, 'LFO2', params_data.amp_lfo2 },
+      {13, 'AM1', params_data.amp_lfo1 },
+      {14, 'AM2', params_data.amp_lfo2 },
       {15, 'SR', sr_types[params_data.sr] },
       {16, 'TYPE', f_types[params_data.ftype] },
       {17, 'FILTER', function(lock) ui.draw_filter(45, 60, params_data, data.ui_index) end },
-      {19, 'LFO1', params_data.cut_lfo1 },
-      {20, 'LFO2', params_data.cut_lfo2 },
+      {19, 'CM1', params_data.cut_lfo1 },
+      {20, 'CM2', params_data.cut_lfo2 },
 
 }
    for k, v in pairs(tile) do
@@ -469,7 +469,7 @@ function ui.sample_screen(params_data, data)
         local lock = false
         if params_data.default then
           if v[2] == 'SR' then
-             lock = sr_types[params_data.default[name_lookup[v[2]]]] ~= v[3] and true or false
+            lock = sr_types[params_data.default[name_lookup[v[2]]]] ~= v[3] and true or false
           elseif v[2] == 'TYPE' then
             lock = f_types[params_data.default[name_lookup[v[2]]]] ~= v[3] and true or false
           else

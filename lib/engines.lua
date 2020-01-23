@@ -68,7 +68,6 @@ function engines.load_folder(file, add)
 end
 
 engines.phase = function(t, x)
-  --if playing then 
     position = x 
     
     if position == length then
@@ -82,10 +81,6 @@ engines.phase = function(t, x)
       playing = false
       recording = false
     end
-  --end
-  --if recording then 
-    --position = x
-  --end
 end
 
 
@@ -202,11 +197,13 @@ function engines.rec(state)
   recording = state
   for i = 1, 2 do
     if state then
-        engines.clear()
+       engines.clear()
        recording = true
+       softcut.loop_start(i, 0)
+       softcut.loop_end(i, 60)
        softcut.poll_start_phase()
-          --softcut.position(i, 0)
-        softcut.rec(i, 1)
+       softcut.position(i, 0)
+       softcut.rec(i, 1)
     else
         length = position
         recording = false
@@ -222,7 +219,7 @@ function engines.play(state)
   for i = 1, 2 do
     if state then
        playing = true
-       softcut.poll_start_phase()
+        softcut.poll_start_phase()
         position = start 
         softcut.position(i, start)
         softcut.play(i, 1)
@@ -238,6 +235,7 @@ end
 function engines.set_start(x)
   start = x
   for i = 1, 2 do
+    softcut.position(i, start)
     softcut.loop_start(i, x)
   end
 end
@@ -246,6 +244,9 @@ end
 function engines.set_length(x)
   length = x
   for i = 1, 2 do
+    if position > x then 
+        softcut.position(i, length)
+    end
     softcut.loop_end(i, x)
   end
 end
