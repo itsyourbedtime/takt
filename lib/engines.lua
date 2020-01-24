@@ -106,7 +106,7 @@ function engines.init()
   Timber.options.PLAY_MODE_STREAMING_DEFAULT = 3
   params:add_separator()
   Timber.add_params()
-  for i = 0, NUM_SAMPLES - 1 do
+  for i = 1, NUM_SAMPLES do
 
     params:add_separator()
     Timber.add_sample_params(i, true) 

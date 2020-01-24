@@ -518,7 +518,7 @@ local step_params = {
       data[data.pattern][tr].params[s].retrig = 0
   end,
   [1] = function(tr, s, d) -- sample
-      data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 0, 99)
+      data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 1, 100)
   end,
   [2] = function(tr, s, d) -- note
       data[data.pattern][tr].params[s].note = util.clamp(data[data.pattern][tr].params[s].note + d, 25, 127)
