@@ -441,7 +441,7 @@ local name_lookup = {
 }
 
 
-function ui.sample_screen(params_data, data)
+function ui.main_screen(params_data, data)
     local sr_types = { '8k', '16k', '32k', '48k' }
     local f_types = { 'LPF', 'HPF' } 
   

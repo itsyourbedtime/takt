@@ -229,9 +229,9 @@ end
 
 local function choke_group(tr, step)
     local last = choke[tr]
-    if data[data.pattern][tr].params[step].lock and data[data.pattern][tr].params[step].playing then
+    --if data[data.pattern][tr].params[step].lock and data[data.pattern][tr].params[step].playing then
       engine.noteOff(last)
-    end
+    --end
 end
 
 local function set_locks(step_param)
@@ -285,30 +285,21 @@ local function seqrun(counter)
         data[data.pattern].track.cycle[tr] = counter % 256 == 0 and data[data.pattern].track.cycle[tr] + 1 or data[data.pattern].track.cycle[tr]  --data[data.pattern].track.cycle[tr]
 
         local mute = data[data.pattern].track.mute[tr]
+        local pos = data[data.pattern][tr][data[data.pattern].track.pos[tr]]
         
-        if data[data.pattern][tr][data[data.pattern].track.pos[tr]] == 1 and not mute  then
+        if pos == 1 and not mute then
           
-          local step_param
-          local play = true
-           
-          if get_params(tr, data[data.pattern].track.p_pos[tr]).lock == 1 then
-            step_param = get_params(tr, data[data.pattern].track.p_pos[tr])
-            set_locks(step_param)
-           else
-            step_param = get_params(tr)
-            set_locks(step_param)
-          end
-          
-       
-          if step_param.rule ~= 0 then
-            play = rule[step_param.rule][2](tr, data[data.pattern].track.p_pos[tr]) 
-            data[data.pattern][tr].params[data[data.pattern].track.p_pos[tr]].playing = play
-          end
-          
-          
-          local play = data[data.pattern][tr].params[data[data.pattern].track.p_pos[tr]].playing
-          
-          if play then 
+          local step_param = get_params(tr, data[data.pattern].track.p_pos[tr])
+
+          if rule[step_param.rule][2](tr, data[data.pattern].track.p_pos[tr]) then 
+            if get_params(tr, data[data.pattern].track.p_pos[tr]).lock == 1 then
+              step_param = get_params(tr, data[data.pattern].track.p_pos[tr])
+              set_locks(step_param)
+             else
+              step_param = get_params(tr)
+              set_locks(step_param)
+            end
+            
             choke_group(tr, data[data.pattern].track.p_pos[tr])
             engine.noteOn(step_param.sample, music.note_num_to_freq(step_param.note), 1, step_param.sample) 
             choke[tr] = step_param.sample
@@ -418,8 +409,6 @@ function init()
         data[t][l] = {}
         data[t][l].params = {}
         data[t][l].params['TR'.. l] = {
-        rev = 1,
-        playing = true,
         offset = 0,
         sample = l,
         note = 60,
@@ -689,6 +678,7 @@ function redraw()
     params_data = get_params(data.selected[1], data.selected[2], true)
   elseif lockd and lockd.lock  == 1 then 
     params_data = get_params(data.selected[1], data[data.pattern].track.p_pos[data.selected[1]], true)
+    
   end
 
   screen.clear()
@@ -698,7 +688,7 @@ function redraw()
   if view.sampling then 
     ui.sampling(params_data, data, engines.get_pos(), engines.get_len(), engines.get_state()) 
   else
-    ui.sample_screen(params_data, data)
+    ui.main_screen(params_data, data)
   end
 
   screen.update()
