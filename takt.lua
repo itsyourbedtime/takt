@@ -236,11 +236,10 @@ local function open_sample_settings()
     _norns.enc(2, 25 +(data[data.pattern][data.selected[1]].params[p].sample * 94))
 end
 
-local function choke_group(tr, step)
-    local last = choke[tr]
-    --if data[data.pattern][tr].params[step].lock and data[data.pattern][tr].params[step].playing then
-      engine.noteOff(last)
-    --end
+local function choke_group(tr, sample)
+  if sample == choke[tr] then
+      engine.noteOff(tr)
+  end
 end
 
 local function set_locks(step_param)
@@ -275,10 +274,6 @@ end
 
 
 local function metaseq(counter)
-  if counter == 255 then 
-    
-    print(data[data.pattern].track.pos[1])
-  end
     if data[data.pattern].track.pos[1] >= data[data.pattern].track.len[1] - 1 then
       data.pattern = data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from
       set_bpm(data[data.pattern].bpm)
@@ -314,8 +309,8 @@ local function seqrun(counter)
               set_locks(step_param)
             end
             
-            choke_group(tr, data[data.pattern].track.p_pos[tr])
-            engine.noteOn(step_param.sample, music.note_num_to_freq(step_param.note), 1, step_param.sample) 
+            choke_group(tr, step_param.sample)
+            engine.noteOn(tr, music.note_num_to_freq(step_param.note), 1, step_param.sample)
             choke[tr] = step_param.sample
           end
        end
