@@ -87,6 +87,14 @@ local function deepcopy(orig)
     return copy
 end
 
+local function reset_positions()
+  for i = 1, 7 do
+    data[data.pattern].track.pos[i] = 0
+    data[data.pattern].track.p_pos[i] = 0
+  end
+end
+
+
 local function set_bpm(n)
     data[data.pattern].bpm = n
     sequencer_metro.time = 60 / data[data.pattern].bpm  / 16 --[[ppqn]] / 4 
@@ -118,6 +126,7 @@ local function load_project(pth)
       
       
       if saved[1] then params:read(norns.state.data .. saved[1] .. ".pset") end
+      reset_positions()
     else
       print("no data")
     end
@@ -266,8 +275,13 @@ end
 
 
 local function metaseq(counter)
-    if counter % 256 == 0 then
+  if counter == 255 then 
+    
+    print(data[data.pattern].track.pos[1])
+  end
+    if data[data.pattern].track.pos[1] >= data[data.pattern].track.len[1] - 1 then
       data.pattern = data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from
+      set_bpm(data[data.pattern].bpm)
     end
 end
 
@@ -707,10 +721,7 @@ local controls = {
           midi_clock:start()
         end
         if MOD then
-            for i = 1, 7 do
-              data[data.pattern].track.pos[i] = 0
-              data[data.pattern].track.p_pos[i] = 0
-            end
+          reset_positions()
         end
       end
     end,
