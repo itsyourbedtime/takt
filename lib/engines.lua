@@ -24,9 +24,10 @@ engine.name = "Timber_Takt"
 
 function engines.load_folder(file, add)
   
-  local sample_id = 0
+  local sample_id = 1
   if add then
     for i = NUM_SAMPLES - 1, 0, -1 do
+      print(i)
       if Timber.samples_meta[i].num_frames > 0 then
         sample_id = i + 1
         break
@@ -44,7 +45,7 @@ function engines.load_folder(file, add)
   for k, v in ipairs(Timber.FileSelect.list) do
     if v == file then found = true end
     if found then
-      if sample_id > 35 then
+      if sample_id > 100 then
         print("Max files loaded")
         break
       end
