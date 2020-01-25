@@ -396,6 +396,13 @@ function init()
     end
 
 
+--[[ 2do - propper track scaling 
+1/8X, 1/4X, 1/2X, 3/4X, 1X, 3/2X and 2X. 
+A setting of 1/8X will play back the pattern at one-eighth of the set tempo. 
+3/4X plays the pattern back at three-quarters of the tempo; 
+3/2X will play back the pattern twice as fast as the 3/4X setting. 
+2X will make the pattern play at twice the BPM.
+]]
 
 
     for t = 1, 16 do
@@ -411,7 +418,6 @@ function init()
             cycle = {1, 1, 1, 1, 1, 1, 1 },
           },
     }
-
 
       for l = 1, 7 do
   
@@ -480,7 +486,7 @@ end
 local sampling_params = {
   [-1] = function(d) data.sampling.mode = util.clamp(data.sampling.mode + d, 1, 4) engines.set_mode(data.sampling.mode) end,
   [0] = function(d) data.sampling.source = util.clamp(data.sampling.source + d, 1, 2) engines.set_source(data.sampling.source) end,
-  [3] = function(d) data.sampling.slot = util.clamp(data.sampling.slot + d, 0, 99) end,
+  [3] = function(d) data.sampling.slot = util.clamp(data.sampling.slot + d, 1, 100) end,
   [4] = function(d) data.sampling.start = util.clamp(data.sampling.start + d / 10, 0, 60) engines.set_start(data.sampling.start) end,
   [5] = function(d) data.sampling.length = util.clamp(data.sampling.length + d / 10, 0.1, 60) engines.set_length(data.sampling.length) end,
   [6] = function(d) end, --play
