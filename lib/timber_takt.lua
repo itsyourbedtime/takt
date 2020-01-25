@@ -62,9 +62,9 @@ local extra_param_ids = {}
 local beat_params = false
 
 options.PLAY_MODE_BUFFER = {"Loop", "Inf. Loop", "Gated", "1-Shot"}
-options.PLAY_MODE_BUFFER_DEFAULT = 1
+options.PLAY_MODE_BUFFER_DEFAULT = 3
 options.PLAY_MODE_STREAMING = {"Loop", "Gated", "1-Shot"}
-options.PLAY_MODE_STREAMING_DEFAULT = 1
+options.PLAY_MODE_STREAMING_DEFAULT = 3
 options.PLAY_MODE_IDS = {{0, 1, 2, 3}, {1, 2, 3}}
 
 options.SCALE_BY = {"Percentage", "Length", "Bars"}

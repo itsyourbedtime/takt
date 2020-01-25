@@ -54,7 +54,6 @@ function engines.load_folder(file, add)
       if string.find(lower_v, ".wav") or string.find(lower_v, ".aif") or string.find(lower_v, ".aiff") then
         print(sample_id,folder .. v )
         Timber.load_sample(sample_id, folder .. v)
-        params:set('play_mode_' .. sample_id, 4)
         sample_id = sample_id + 1
       else
         print("Skipped", v)
@@ -66,8 +65,9 @@ end
 engines.phase = function(t, x)
     position = x 
     
-    if position == length then
+    if position >= length then
       position = start
+      
       for i = 1, 2 do 
         softcut.position(i, start)
         softcut.play(i, 0)
@@ -205,6 +205,8 @@ function engines.rec(state)
         recording = false
         softcut.poll_stop_phase()
         softcut.rec(i, 0)
+        start = 0
+        softcut.position(i, start)
     end
   end
 
@@ -241,7 +243,7 @@ function engines.set_length(x)
   length = x
   for i = 1, 2 do
     if position > x then 
-        softcut.position(i, length)
+        softcut.position(i, start)
     end
     softcut.loop_end(i, x)
   end
@@ -264,9 +266,9 @@ function engines.save_and_load(slot)
   
   local PATH = _path.audio .. 'takt/'
   if not util.file_exists(PATH) then util.make_dir(PATH) end
-  local name = 'sample_' ..  #util.scandir(PATH)
-    
-  --print(mode)
+  --local name = 'sample_' ..  #util.scandir(PATH)
+  local name = os.date('%m%d%H%M') ..'_'.. slot 
+  
   if mode == 1 or mode == 2 then
     softcut.buffer_write_stereo (PATH .. name, start, length)
   elseif mode == 3 then
@@ -274,18 +276,18 @@ function engines.save_and_load(slot)
   elseif mode == 4 then
     softcut:buffer_write_mono (PATH .. name, start, length, 2)
   end
-  
 
-
-  wait_metro.event = function(stage)
-    --print('saved')
-    Timber.load_sample(slot, PATH .. name)
-    params:set('play_mode_' .. slot, 3)
-    engines.clear()
+  local saved = false
+  while not saved do
+    local ch, len = audio.file_info(PATH .. name)
+    if util.round(len / 48000, 0.1) == util.round(length, 0.1) then 
+      saved = true 
+      break 
+    end
   end
-    
-  wait_metro:start()
   
+  print('len ok - loading')
+  Timber.load_sample(slot, PATH .. name)
 end
 
 

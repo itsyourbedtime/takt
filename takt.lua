@@ -233,7 +233,7 @@ local function open_sample_settings()
     norns.menu.toggle(true)
     _norns.enc(1, 100)
     _norns.enc(2,-9999999)
-    _norns.enc(2, 25 +(data[data.pattern][data.selected[1]].params[p].sample * 94))
+    _norns.enc(2, 25 +(( data[data.pattern][data.selected[1]].params[p].sample - 1 ) * 94 ))
 end
 
 local function choke_group(tr, sample)
@@ -670,6 +670,7 @@ function key(n,z)
         engines.play(false)
         engines.rec(false)
         engines.save_and_load(data.sampling.slot)
+        --params:set('play_mode_' .. data.sampling.slot, 3)
       elseif data.ui_index == 6  and z == 1 then
         engines.clear()
         data.sampling.start = 0
