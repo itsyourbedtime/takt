@@ -62,23 +62,11 @@ local extra_param_ids = {}
 local beat_params = false
 
 options.PLAY_MODE_BUFFER = {"Loop", "Inf. Loop", "Gated", "1-Shot"}
-options.PLAY_MODE_BUFFER_DEFAULT = 3
+options.PLAY_MODE_BUFFER_DEFAULT = 2
 options.PLAY_MODE_STREAMING = {"Loop", "Gated", "1-Shot"}
-options.PLAY_MODE_STREAMING_DEFAULT = 3
+options.PLAY_MODE_STREAMING_DEFAULT = 2
 options.PLAY_MODE_IDS = {{0, 1, 2, 3}, {1, 2, 3}}
 
-options.SCALE_BY = {"Percentage", "Length", "Bars"}
-options.SCALE_BY_NO_BARS = {"Percentage", "Length"}
-specs.BY_PERCENTAGE = ControlSpec.new(10, 500, "lin", 0, 100, "%")
-
-options.BY_BARS = {"1/64", "1/48", "1/32", "1/24", "1/16", "1/12", "1/8", "1/6", "1/4", "1/3", "1/2", "2/3", "3/4", "1 bar"}
-options.BY_BARS_NA = {}
-for i = 1, #options.BY_BARS do table.insert(options.BY_BARS_NA, "N/A") end
-options.BY_BARS_DECIMAL = {1/64, 1/48, 1/32, 1/24, 1/16, 1/12, 1/8, 1/6, 1/4, 1/3, 1/2, 2/3, 3/4, 1}
-for i = 2, 32 do
-  table.insert(options.BY_BARS, i .. " bars")
-  table.insert(options.BY_BARS_DECIMAL, i)
-end
 
 specs.LFO_1_FREQ = ControlSpec.new(0.05, 20, "exp", 0, 2, "Hz")
 specs.LFO_2_FREQ = ControlSpec.new(0.05, 20, "exp", 0, 4, "Hz")
@@ -119,7 +107,7 @@ end
 
 -- Meta data
 -- These are index zero to align with SC and MIDI note numbers
-for i = 0, 255 do
+for i = 1, 100 do
   samples_meta[i] = default_sample()
 end
 
@@ -141,16 +129,6 @@ local function lookup_play_mode(sample_id)
   return options.PLAY_MODE_IDS[samples_meta[sample_id].streaming + 1][params:get("play_mode_" .. sample_id)]
 end
 
-local function update_by_bars_options(sample_id)
-  if beat_params then
-    local param = params:lookup_param("by_bars_" .. sample_id)
-    if params:get("scale_by_" .. sample_id) == 3 then
-      param.options = options.BY_BARS
-    else
-      param.options = options.BY_BARS_NA
-    end
-  end
-end
 
 local function set_play_mode(id, play_mode)
   engine.playMode(id, play_mode)
@@ -197,7 +175,6 @@ local function sample_loaded(id, streaming, num_frames, num_channels, sample_rat
     play_mode_param.count = #options.PLAY_MODE_STREAMING
   end
   
-  --update_by_bars_options(id)
   local duration = num_frames / sample_rate
 
   -- Set defaults
@@ -295,32 +272,7 @@ function Timber.clear_samples(first, last)
   Timber.setup_params_dirty = true
 end
 
-local function update_freq_multiplier(sample_id)
-  
-  local scale_by = params:get("scale_by_" .. sample_id)
-  local multiplier = 1
-  local sample_duration = math.abs(params:get("end_frame_" .. sample_id) - params:get("start_frame_" .. sample_id)) / samples_meta[sample_id].sample_rate
-  if scale_by == 1 then
-    multiplier = params:get("by_percentage_" .. sample_id) / 100
-  elseif scale_by == 2 then
-    multiplier = sample_duration / params:get("by_length_" .. sample_id)
-  elseif scale_by == 3 then
-    multiplier = sample_duration / (options.BY_BARS_DECIMAL[params:get("by_bars_" .. sample_id)] * (60 / Timber.bpm * 4))
-  end
-  
-  if multiplier ~= samples_meta[sample_id].freq_multiplier then
-    engine.freqMultiplier(sample_id, multiplier)
-    samples_meta[sample_id].freq_multiplier = multiplier
-  end
-end
 
-local function update_by_bar_multipliers()
-  for i = 0, Timber.num_sample_params - 1 do
-    if params:get("scale_by_" .. i) == 3 then
-      --update_freq_multiplier(i)
-    end
-  end
-end
 
 local function build_extended_params(exclusions)
   
@@ -367,8 +319,6 @@ end
 local function move_copy_update(from_id, to_id)
   local ids = {from_id, to_id}
   for _, id in pairs(ids) do
-    --update_by_bars_options(id)
-    --update_freq_multiplier(id)
     samples_meta[id].positions = {}
     samples_meta[id].playing = false
     Timber.meta_changed_callback(id)    
@@ -561,11 +511,11 @@ local function set_marker(id, param_prefix)
   
   if param_prefix == "start_frame_" or start_frame ~= params:get("start_frame_" .. id) then
     engine.startFrame(id, params:get("start_frame_" .. id))
-    --update_freq_multiplier(id)
+
   end
   if param_prefix == "end_frame_" or end_frame ~= params:get("end_frame_" .. id) then
     engine.endFrame(id, params:get("end_frame_" .. id))
-    --update_freq_multiplier(id)
+
   end
   
   waveform_last_edited = {id = id, param = param_prefix .. id}
@@ -598,7 +548,6 @@ osc.event = Timber.osc_event
 
 function Timber.set_bpm(bpm)
   Timber.bpm = bpm
-  --update_by_bar_multipliers()
 end
 
 

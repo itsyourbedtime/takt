@@ -670,7 +670,7 @@ function key(n,z)
         engines.play(false)
         engines.rec(false)
         engines.save_and_load(data.sampling.slot)
-        --params:set('play_mode_' .. data.sampling.slot, 3)
+        params:set('play_mode_' .. data.sampling.slot, 2)
       elseif data.ui_index == 6  and z == 1 then
         engines.clear()
         data.sampling.start = 0

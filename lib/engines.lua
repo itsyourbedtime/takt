@@ -54,6 +54,7 @@ function engines.load_folder(file, add)
       if string.find(lower_v, ".wav") or string.find(lower_v, ".aif") or string.find(lower_v, ".aiff") then
         print(sample_id,folder .. v )
         Timber.load_sample(sample_id, folder .. v)
+        params:set('play_mode_'..sample_id, 4)
         sample_id = sample_id + 1
       else
         print("Skipped", v)
@@ -266,8 +267,8 @@ function engines.save_and_load(slot)
   
   local PATH = _path.audio .. 'takt/'
   if not util.file_exists(PATH) then util.make_dir(PATH) end
-  --local name = 'sample_' ..  #util.scandir(PATH)
-  local name = os.date('%m%d%H%M') ..'_'.. slot 
+  local name = 'sample_' ..  #util.scandir(PATH)
+  --local name = os.date('%m%d%H%M') ..'_'.. slot 
   
   if mode == 1 or mode == 2 then
     softcut.buffer_write_stereo (PATH .. name, start, length)
@@ -288,6 +289,7 @@ function engines.save_and_load(slot)
   
   print('len ok - loading')
   Timber.load_sample(slot, PATH .. name)
+  
 end
 
 
