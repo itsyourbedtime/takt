@@ -496,6 +496,14 @@ local sampling_params = {
 
 }
 
+local function get_len(tr, s)
+
+local maxval = params:lookup_param("end_frame_" .. data[data.pattern][tr].params[s].sample).controlspec.maxval 
+--print(maxval)
+  if (data[data.pattern][tr].params[s].s_end ~= maxval and maxval ~= 2000000000) and data[data.pattern][tr].params[s].lock == 0 then 
+      data[data.pattern][tr].params[s].s_end = maxval
+  end
+end
 
 local step_params = {
   [-6] = function(tr, s, d) -- ptn
@@ -525,7 +533,8 @@ local step_params = {
   end,
   [1] = function(tr, s, d) -- sample
       data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 1, 100)
-  end,
+      get_len(tr, s)
+  end, 
   [2] = function(tr, s, d) -- note
       data[data.pattern][tr].params[s].note = util.clamp(data[data.pattern][tr].params[s].note + d, 25, 127)
       --
