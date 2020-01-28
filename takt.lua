@@ -13,6 +13,7 @@ local textentry = require('textentry')
 local midi_clock
 local hold_time = 0
 local down_time = 0
+local midi_in_device
 
 local blink = 1
 local ALT, SHIFT, MOD = false, false, false
@@ -48,29 +49,60 @@ local view = { steps_engine = true, sampling = false, patterns = false }
 
 local choke = { 1, 2, 3, 4, 5, 6, 7 }
 
-local rule = {
-  [0] = { 'OFF', function() return true end },
-  [1] = { '10%', function() return 10 >= math.random(100) and true or false end },
-  [2] = { '20%', function() return 20 >= math.random(100) and true or false end },
-  [3] = { '30%', function() return 30 >= math.random(100) and true or false end },
-  [4] = { '50%', function() return 50 >= math.random(100) and true or false end },
-  [5] = { '60%', function() return 60 >= math.random(100) and true or false end },
-  [6] = { '70%', function() return 70 >= math.random(100) and true or false end },
-  [7] = { '90%', function() return 90 >= math.random(100) and true or false end },
-  
-  [8] = { 'PREV', function(tr, step) return data[data.pattern][tr].params[step - 1].playing end },
-  [9] = { 'NEXT', function(tr, step) return data[data.pattern][tr].params[step + 1].playing end },
-  
-  [10] = {'EVERY 2', function(tr, step) return data[data.pattern].track.cycle[tr] % 2 == 0 and true or false  end },
-  [11] = {'EVERY 3', function(tr, step) return data[data.pattern].track.cycle[tr] % 3 == 0 and true or false  end },
-  [12] = {'EVERY 4', function(tr, step) return data[data.pattern].track.cycle[tr] % 4 == 0 and true or false  end },
-  [13] = {'EVERY 5', function(tr, step) return data[data.pattern].track.cycle[tr] % 5 == 0 and true or false  end },
-  [14] = {'EVERY 6', function(tr, step) return data[data.pattern].track.cycle[tr] % 6 == 0 and true or false  end },
-  [15] = {'EVERY 7', function(tr, step) return data[data.pattern].track.cycle[tr] % 7 == 0 and true or false  end },
-  [16] = {'EVERY 8', function(tr, step) return data[data.pattern].track.cycle[tr] % 8 == 0 and true or false  end },
-  
-  
+local param_ids = {
+      ['sr'] = "quality",  
+      --['mode'] = "play_mode", 
+      ['start'] = "start_frame", 
+      ['s_end'] = "end_frame",
+      ['freq_lfo1'] = "freq_mod_lfo_1", 
+      ['freq_lfo2'] = "freq_mod_lfo_2", 
+      ['ftype'] = "filter_type", 
+      ['cutoff'] = "filter_freq", 
+      ['resonance'] = "filter_resonance", 
+      ['cut_lfo1'] = "filter_freq_mod_lfo_1", 
+      ['cut_lfo2'] = "filter_freq_mod_lfo_2", 
+      ['pan'] = "pan",
+      ['vol'] = "amp", 
+      ['amp_lfo1'] = "amp_mod_lfo_1", 
+      ['amp_lfo2'] = "amp_mod_lfo_2",
+      ['attack'] = "amp_env_attack",
+      ['decay'] = "amp_env_decay", 
+      ['sustain'] = "amp_env_sustain", 
+      ['release'] = "amp_env_release",
 }
+
+
+
+
+local rule = {
+  [0] =  { 'OFF', function() return true end },
+  [1] =  { '10%', function() return 10 >= math.random(100) and true or false end },
+  [2] =  { '20%', function() return 20 >= math.random(100) and true or false end },
+  [3] =  { '30%', function() return 30 >= math.random(100) and true or false end },
+  [4] =  { '50%', function() return 50 >= math.random(100) and true or false end },
+  [5] =  { '60%', function() return 60 >= math.random(100) and true or false end },
+  [6] =  { '70%', function() return 70 >= math.random(100) and true or false end },
+  [7] =  { '90%', function() return 90 >= math.random(100) and true or false end },
+  [8] =  {'/ 2', function(tr, step) return data[data.pattern].track.cycle[tr] % 2 == 0 and true or false  end },
+  [9] =  {'/ 3', function(tr, step) return data[data.pattern].track.cycle[tr] % 3 == 0 and true or false  end },
+  [10] = {'/ 4', function(tr, step) return data[data.pattern].track.cycle[tr] % 4 == 0 and true or false  end },
+  [11] = {'/ 5', function(tr, step) return data[data.pattern].track.cycle[tr] % 5 == 0 and true or false  end },
+  [12] = {'/ 6', function(tr, step) return data[data.pattern].track.cycle[tr] % 6 == 0 and true or false  end },
+  [13] = {'/ 7', function(tr, step) return data[data.pattern].track.cycle[tr] % 7 == 0 and true or false  end },
+  [14] = {'/ 8', function(tr, step) return data[data.pattern].track.cycle[tr] % 8 == 0 and true or false  end },
+  [15] = {'RND NOTE', function(tr, step) 
+    data[data.pattern][tr].params[step].note = math.random(20,120) return true end },
+  [16] = {'+- NOTE', function(tr, step) 
+    data[data.pattern][tr].params[step].note = data[data.pattern][tr].params[step].note + math.random(-10,10) return true end },
+  [17] = {'RND START', function(tr, step) 
+    data[data.pattern][tr].params[step].start = math.random(0,params:lookup_param("end_frame_" .. data[data.pattern][tr].params[step].sample).controlspec.maxval) 
+    return true end },
+  [18] = {'RND ST-EN', function(tr, step) 
+    data[data.pattern][tr].params[step].start = math.random(0,params:lookup_param("end_frame_" .. data[data.pattern][tr].params[step].sample).controlspec.maxval)
+    data[data.pattern][tr].params[step].s_end = math.random(0,params:lookup_param("end_frame_" .. data[data.pattern][tr].params[step].sample).controlspec.maxval)
+    return true end },
+}
+
 
 local function deepcopy(orig)
     local orig_type = type(orig)
@@ -160,11 +192,7 @@ end
 local function set_view(x)
     data.ui_index = 1 
     for k, v in pairs(view) do
-      if k == x then
-        view[k] = true
-      else
-        view[k] = false
-      end
+      view[k] = k == x and true or false
     end
 end
 
@@ -211,14 +239,6 @@ local function get_params(tr, step, lock)
     end
 end
 
-local function get_midi_params(tr, step)
-    if not step then
-      return data[data.pattern][tr].midi['TR' .. tr]
-    else
-      return data[data.pattern][tr].midi[step] 
-    end
-end
-
 local function is_lock()
     local src = data.selected
     if src[2] == false then
@@ -231,7 +251,7 @@ end
 local function open_sample_settings()
     local p = is_lock()
     norns.menu.toggle(true)
-    _norns.enc(1, 100)
+    _norns.enc(1, 1000)
     _norns.enc(2,-9999999)
     _norns.enc(2, 25 +(( data[data.pattern][data.selected[1]].params[p].sample - 1 ) * 94 ))
 end
@@ -242,29 +262,8 @@ local function choke_group(tr, sample)
   end
 end
 
-local function set_locks(step_param)
-   local param_ids = {
-                ['sr'] = "quality",  
-                --['mode'] = "play_mode", 
-                ['start'] = "start_frame", 
-                ['s_end'] = "end_frame",
-                ['freq_lfo1'] = "freq_mod_lfo_1", 
-                ['freq_lfo2'] = "freq_mod_lfo_2", 
-                ['ftype'] = "filter_type", 
-                ['cutoff'] = "filter_freq", 
-                ['resonance'] = "filter_resonance", 
-                ['cut_lfo1'] = "filter_freq_mod_lfo_1", 
-                ['cut_lfo2'] = "filter_freq_mod_lfo_2", 
-                ['pan'] = "pan",
-                ['vol'] = "amp", 
-                ['amp_lfo1'] = "amp_mod_lfo_1", 
-                ['amp_lfo2'] = "amp_mod_lfo_2",
-                ['attack'] = "amp_env_attack",
-                ['decay'] = "amp_env_decay", 
-                ['sustain'] = "amp_env_sustain", 
-                ['release'] = "amp_env_release",
-              }
 
+local function set_locks(step_param)
     for k, v in pairs(step_param) do
       if param_ids[k] ~= nil then
         params:set(param_ids[k]  .. '_' .. step_param.sample, v)
@@ -366,9 +365,50 @@ local function get_tr_len( tr )
   return math.ceil(data[data.pattern].track.len[tr] / 16)
 end
 
-function init()
+--[[
+local function midi_event(data)
   
-    math.randomseed(os.time())
+  local msg = midi.to_msg(data)
+  local sample_id
+  if msg.ch then
+    sample_id = msg.ch - 1
+  end
+  local voice_id
+  if msg.note then
+    voice_id = (msg.ch - 1) * 128 + msg.note
+  end
+  
+  -- Note off
+  if msg.type == "note_off" then
+    engine.noteOff(voice_id)
+    
+     print("note off", msg.note, voice_id, sample_id)
+  
+  -- Note on
+  elseif msg.type == "note_on" then
+    
+    --engine.noteOn
+    engine.noteOn(1, music.note_num_to_freq(msg.note), msg.vel / 127, 1)
+    print("note on", msg.note, msg.vel, voice_id, sample_id)
+    
+   -- if sequencer_metro.is_running then
+      local pos = data[1].track.pos[1]
+      print(pos)
+      --data[data.pattern][1][pos] = 1
+
+    --end
+
+  end
+
+end
+]]
+
+
+function init()
+--[[    midi_in_device = midi.connect(1)
+    midi_in_device.event = midi_event
+]]    
+  math.randomseed(os.time())
 
     params:add_trigger('save_p', "< Save project" )
     params:set_action('save_p', function(x) textentry.enter(save_project,  'new') end)
@@ -520,7 +560,7 @@ local step_params = {
       sync_tracks(tr)
   end,
   [-2] = function(tr, s, d) -- rule
-      data[data.pattern][tr].params[s].rule = util.clamp(data[data.pattern][tr].params[s].rule + d, 0, 16)
+      data[data.pattern][tr].params[s].rule = util.clamp(data[data.pattern][tr].params[s].rule + d, 0, #rule)
   end,
   [-1] = function(tr, s, d) -- retrig
       data[data.pattern][tr].params[s].retrig = util.clamp(data[data.pattern][tr].params[s].retrig + d, 0, 15)
@@ -627,7 +667,7 @@ function enc(n,d)
       if not K1_hold then 
         data.ui_index = util.clamp(data.ui_index + d, not data.selected[2] and 1 or -2, 20)
       else
-        data.ui_index = util.clamp(data.ui_index + d, -6, -3)
+        data.ui_index = util.clamp(data.ui_index + d, -6, -1)
       end
     elseif view.sampling then
       if not data.sampling.rec then
@@ -655,7 +695,7 @@ function key(n,z)
   if n == 1 then 
     K1_hold = z == 1 and true or false
     if z == 1 and not view.sampling then 
-      data.ui_index = -3
+      data.ui_index = -4
     elseif z == 0 and not view.sampling then  
       data.ui_index = 1
     end
@@ -684,13 +724,18 @@ function key(n,z)
         engines.clear()
         data.sampling.start = 0
       end
-    else
+    elseif view.steps_engine then
       if data.ui_index == 1 then
         open_sample_settings()
       end
     end
   end
 end
+
+
+
+
+
 
 function redraw()
 
@@ -708,7 +753,7 @@ function redraw()
 
   screen.clear()
   
-  ui.head(params_data, data, view)
+  ui.head(params_data, data, view, K1_hold, rule)
   
   if view.sampling then 
     ui.sampling(params_data, data, engines.get_pos(), engines.get_len(), engines.get_state()) 
@@ -908,7 +953,7 @@ function g.redraw()
           or data.pattern == i and 15 
           or 3
           
-          g:led(i, 1, level) -- data.pattern == i and 15 or 6)
+          g:led(i, 1, level)
         end
       end
     end 
@@ -934,3 +979,5 @@ function g.redraw()
   
   g:refresh()
 end
+
+

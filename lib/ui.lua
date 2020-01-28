@@ -49,8 +49,6 @@ end
 
 
 local music = require 'musicutil'
-local rules = { [0] = 'OFF', '10%', '20%', '30%', '50%', '60%', '70%', '90%', 'PREV', 'NEXT', '/ 2', '/ 3', '/ 4', '/ 5', '/ 6', '/ 7', '/ 8', } 
-
 
 local function get_step(x) return (x * 16) - 15 end
 
@@ -70,7 +68,7 @@ local function metro_icon(x, y, pos)
 
 end
 
-function ui.head(params_data, data, view) -- , selected, data[data.pattern].track, data, data.ui_index)
+function ui.head(params_data, data, view, k1, rules) -- , selected, data[data.pattern].track, data, data.ui_index)
   
   screen.level((not view.sampling and data.ui_index == -6 ) and 5 or 2)  
   screen.rect(1, 0, 20, 7)
@@ -102,16 +100,21 @@ function ui.head(params_data, data, view) -- , selected, data[data.pattern].trac
   screen.stroke()
   
   if s then 
+    local rule_name = rules[params_data.rule][1]
     
     screen.level((not view.sampling and data.ui_index == -2 ) and 5 or 2)  
     screen.rect(43, 0, 41, 7)
     screen.fill()
     screen.level(0)
-    screen.move(44, 6)
-    screen.text('RULE')
-    screen.move(82, 6)
-    screen.text_right(rules[params_data.rule])
-    
+    if string.len(rule_name) < 5 then
+      screen.move(45, 6)
+      screen.text('RULE')
+      screen.move(82, 6)
+      screen.text_right(rule_name)
+    else
+      screen.move(45, 6)
+      screen.text(rule_name)
+    end
     
   else
     screen.level((not view.sampling and data.ui_index == -4) and 5 or 2)  
@@ -137,30 +140,49 @@ function ui.head(params_data, data, view) -- , selected, data[data.pattern].trac
     screen.text_right(data[data.pattern].track.div[data.selected[1]])
     screen.stroke()
   end
-  screen.level((not view.sampling and data.ui_index == -1) and 5 or 2)  
-  screen.rect(85, 0, 9, 7)
-  screen.fill()
-  screen.level(0)
-  screen.move(89,6)
-  screen.text_center(params_data.retrig)
-  screen.stroke()
-
+  if not k1 then
+    screen.level((not view.sampling and data.ui_index == -1) and 5 or 2)  
+    screen.rect(85, 0, 9, 7)
+    screen.fill()
+    screen.level(0)
+    screen.move(89,6)
+    screen.text_center(params_data.retrig)
+    screen.stroke()
   
-  for i = 1, 16 do
-    local offset_y = i <= 8 and 0 or 4
-    local offset_x = i <= 8 and 0 or 8
-    local tr = data.selected[1]
-    local s = data.selected[2] and get_step(data.selected[2]) or data[data.pattern].track.pos[tr]
-    screen.level((not view.sampling and data.ui_index == 0) and 5 or 2)
-
-      local step = data[data.pattern][data.selected[1]][s + (i - 1 )]
-      if step == 1 then
-        screen.rect(92 + ((i - offset_x) * 4), offset_y + 1, 2, 2)
-      else
-        screen.rect(91 + ((i - offset_x) * 4), offset_y, 3, 3)
-      end
-
-      if step == 1 then screen.stroke() else screen.fill() end
+      
+      for i = 1, 16 do
+        local offset_y = i <= 8 and 0 or 4
+        local offset_x = i <= 8 and 0 or 8
+        local tr = data.selected[1]
+        local s = data.selected[2] and get_step(data.selected[2]) or data[data.pattern].track.pos[tr]
+        screen.level((not view.sampling and data.ui_index == 0) and 5 or 2)
+    
+          local step = data[data.pattern][data.selected[1]][s + (i - 1 )]
+          if step == 1 then
+            screen.rect(92 + ((i - offset_x) * 4), offset_y + 1, 2, 2)
+          else
+            screen.rect(91 + ((i - offset_x) * 4), offset_y, 3, 3)
+          end
+    
+          if step == 1 then screen.stroke() else screen.fill() end
+    
+    end
+  else
+    screen.level(data.ui_index == -2 and 5 or 2)  
+    screen.rect(85, 0, 20, 7)
+    screen.fill()
+    screen.level(0)
+    screen.move(89,6)
+    --screen.text_center('SETTINGS')
+    screen.stroke()    
+    
+    screen.level(data.ui_index == -1 and 5 or 2)  
+    screen.rect(106, 0, 20, 7)
+    screen.fill()
+    screen.level(0)
+    screen.move(89,6)
+    --screen.text_center('SETTINGS')
+    screen.stroke()
 
   end
 end
