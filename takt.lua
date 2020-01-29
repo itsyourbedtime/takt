@@ -6,6 +6,7 @@
 
 local engines = include('lib/engines')
 local ui = include('lib/ui')
+local linn = include('lib/linn')
 local beatclock = require 'beatclock'
 local music = require 'musicutil'
 local fileselect = require('fileselect')
@@ -45,7 +46,7 @@ local data = {
 }
 
 
-local view = { steps_engine = true, sampling = false, patterns = false } 
+local view = { steps_engine = true, notes_input = false, sampling = false, patterns = false } 
 
 local choke = { 1, 2, 3, 4, 5, 6, 7 }
 
@@ -663,7 +664,7 @@ function enc(n,d)
         data.selected[1] = util.clamp(data.selected[1] + d, 1, 7)
   elseif n == 2 then
     
-    if view.steps_engine then
+    if view.steps_engine or view.notes_input or view.patterns then
       if not K1_hold then 
         data.ui_index = util.clamp(data.ui_index + d, not data.selected[2] and 1 or -2, 20)
       else
@@ -675,7 +676,7 @@ function enc(n,d)
       end
     end
   elseif n == 3 then
-    if view.steps_engine then
+    if view.steps_engine or view.notes_input or view.patterns then 
       local p = is_lock()
       
       if data.selected[2] then 
@@ -683,7 +684,9 @@ function enc(n,d)
       end 
       
       step_params[data.ui_index](tr, p, d)
-      
+      if not sequencer_metro.is_running then
+          set_locks(get_params(tr))
+      end
     elseif view.sampling then
       
       sampling_params[data.ui_index](d)
@@ -724,7 +727,7 @@ function key(n,z)
         engines.clear()
         data.sampling.start = 0
       end
-    elseif view.steps_engine then
+    elseif view.steps_engine or view.notes_input or view.patterns then
       if data.ui_index == 1 then
         open_sample_settings()
       end
@@ -781,17 +784,39 @@ local controls = {
         end
       end
     end,
-  [5] = function(z) set_view('steps_engine') end,
-  [7] = function(z) if z == 1 then set_view(view.sampling and 'steps_engine' or 'sampling') end  end,
-  [9] = function(z) if z == 1 then set_view(view.patterns and 'steps_engine' or 'patterns') end end,
-  [12] = function(z) MOD = z == 1 and true or false  if z == 0 then copy = { false, false } end  end,
+  [8] = function(z) set_view('steps_engine') end,
+  [9] = function(z) set_view('notes_input') end,
+  [10] = function(z) if z == 1 then set_view(view.sampling and 'steps_engine' or 'sampling') end  end,
+  [11] = function(z) if z == 1 then set_view(view.patterns and 'steps_engine' or 'patterns') end end,
+  [13] = function(z) MOD = z == 1 and true or false  if z == 0 then copy = { false, false } end  end,
   [15] = function(z) ALT = z == 1 and true or false end,
   [16] = function(z) SHIFT = z == 1 and true or false end,
 }
 
 function g.key(x, y, z)
   screen.ping()
-  
+    if view.notes_input then
+        local note = linn.grid_key(x, y, z)
+        if note then 
+            local current = data.selected[2] or 'TR'.. data.selected[1]
+            engine.noteOn(data.selected[1], music.note_num_to_freq(note), 1, data[data.pattern][data.selected[1]].params[current].sample)
+        end
+        
+        if sequencer_metro.is_running and note then 
+            local tr = data.selected[1]
+            local pos = data[data.pattern].track.pos[tr]
+            local p_pos = data[data.pattern].track.p_pos[tr]
+            
+            data[data.pattern][tr][pos] = 1
+            --data[data.pattern][tr].params[p_pos] = deepcopy(get_params(tr, 'TR'..tr))
+            data[data.pattern][tr].params[p_pos].amp = data[data.pattern][tr].params['TR'..tr].amp
+            data[data.pattern][tr].params[p_pos].note = note
+            data[data.pattern][tr].params[p_pos].lock = 1
+
+            
+        end
+    end    
+        
   if y < 8 then
     local held
     local cond = have_substeps(y, x) 
@@ -914,10 +939,15 @@ end
 function g.redraw() 
   g:all(0)
   
+  if view.notes_input then 
+    linn.grid_redraw(g)
+  end
   
   for y = 1, 7 do 
     for x = 1, 16 do 
-      if not view.patterns then
+      if view.notes_input then 
+        
+      elseif not view.patterns then
         if SHIFT then
           
             g:led(data[data.pattern].track.div[y], y, 15)
@@ -959,7 +989,7 @@ function g.redraw()
     end 
   end
   
-  if sequencer_metro.is_running and not view.patterns  and not SHIFT then
+  if sequencer_metro.is_running and view.steps_engine and not SHIFT then
     for i = 1, 7 do
       local pos = math.ceil(data[data.pattern].track.pos[i] / 16)
       if not data[data.pattern].track.mute[i] then g:led(pos, i, 6 ) end
@@ -968,11 +998,12 @@ function g.redraw()
   
   
   g:led(1, 8, sequencer_metro.is_running and 15 or 6 )
-  g:led(5, 8, view.steps_engine and 15  or  6)
-  g:led(7, 8, view.sampling and 15 or 6)
-  g:led(9, 8, view.patterns and 15 or 6)
+  g:led(8, 8, view.steps_engine and 15  or  6)
+  g:led(9, 8, view.notes_input and 15  or  6)
+  g:led(10, 8, view.sampling and 15 or 6)
+  g:led(11, 8, view.patterns and 15 or 6)
 
-  g:led(12, 8, MOD and util.clamp(blink,5,15) or 6 )
+  g:led(13, 8, MOD and util.clamp(blink,5,15) or 6 )
   g:led(15, 8, ALT and util.clamp(blink,5,15)  or 6 )
   g:led(16, 8, SHIFT and util.clamp(blink,5,15)  or 6 )
   
