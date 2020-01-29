@@ -4,7 +4,7 @@
 -- @module TimberEngine
 -- @release v1.0.0 Beta 6
 -- @author Mark Eats
--- @minor tweaks for takt
+-- minor tweaks for takt
 
 local ControlSpec = require "controlspec"
 local Formatters = require "formatters"

@@ -10,7 +10,6 @@ local recording = false
 local position = 0
 local start = 0
 local length = 60
-local wait_metro 
 local mode = 1
 
 function unrequire(name)
@@ -42,6 +41,7 @@ function engines.load_folder(file, add)
   file = string.sub(file, split_at + 1)
   
   local found = false
+  
   for k, v in ipairs(Timber.FileSelect.list) do
     if v == file then found = true end
     if found then
@@ -52,16 +52,19 @@ function engines.load_folder(file, add)
       -- Check file type
       local lower_v = v:lower()
       if string.find(lower_v, ".wav") or string.find(lower_v, ".aif") or string.find(lower_v, ".aiff") then
-        print(sample_id,folder .. v )
+        --print(sample_id,folder .. v )
         Timber.load_sample(sample_id, folder .. v)
         params:set('play_mode_'..sample_id, 4)
         sample_id = sample_id + 1
       else
         print("Skipped", v)
       end
+      
     end
+    
   end
 end
+
 
 engines.phase = function(t, x)
     position = x 
@@ -96,9 +99,6 @@ end
 
 function engines.init()
   -- timbers
-  wait_metro = metro.init()
-  wait_metro.time = 1
-  wait_metro.count = 1
 
   params:add_trigger('load_f','+ Load Folder')
   params:set_action('load_f', function() Timber.FileSelect.enter(_path.audio, function(file)
