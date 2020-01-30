@@ -68,7 +68,10 @@ local function metro_icon(x, y, pos)
 
 end
 
-function ui.head(params_data, data, view, k1, rules) -- , selected, data[data.pattern].track, data, data.ui_index)
+function ui.head(params_data, data, view, k1, rules, PATTERN_REC) -- , selected, data[data.pattern].track, data, data.ui_index)
+  local tr = data.selected[1]
+  local s = data.selected[2]
+  local p_pos = data[data.pattern].track.p_pos[tr]
   
   screen.level((not view.sampling and data.ui_index == -6 ) and 5 or 2)  
   screen.rect(1, 0, 20, 7)
@@ -78,23 +81,21 @@ function ui.head(params_data, data, view, k1, rules) -- , selected, data[data.pa
   screen.font_size(6)
   screen.font_face(25)
   screen.move(2,6)
-  screen.text('P')--  .. pattern)
+  screen.text(PATTERN_REC and 'P!' or 'P')--  .. pattern)
   screen.move(17,6)
   screen.text_right(data.pattern or nil )
   screen.stroke()
-  
+
   screen.level((not view.sampling and data.ui_index == -5 ) and 5 or 2)  
   screen.rect(22, 0, 20, 7)
   screen.fill()
   screen.level(0)
   screen.move(31,6)
-  local tr = data.selected[1]
-  local s = data.selected[2]
   
   if s then 
-    screen.text_center( data.selected[1] ..':' .. data.selected[2] )
+    screen.text_center( tr ..':' .. s )
   else
-    screen.text_center( 'TR ' .. data.selected[1] )
+    screen.text_center( 'TR ' .. tr )
   end
   
   screen.stroke()
@@ -121,7 +122,7 @@ function ui.head(params_data, data, view, k1, rules) -- , selected, data[data.pa
     screen.rect(43, 0, 25, 7)
     screen.fill()
     screen.level(0)
-    metro_icon(42,1, data[data.pattern].track.p_pos[data.selected[1]])
+    metro_icon(42,1, data[data.pattern].track.p_pos[tr])
     screen.move(66, 6)
     screen.text_right(data[data.pattern].bpm)
     
@@ -129,6 +130,7 @@ function ui.head(params_data, data, view, k1, rules) -- , selected, data[data.pa
   end
 
   screen.stroke()
+  
   if not s then
     screen.level((not view.sampling and data.ui_index == -3) and 5 or 2)  
     screen.rect(69, 0, 15, 7)
@@ -137,9 +139,10 @@ function ui.head(params_data, data, view, k1, rules) -- , selected, data[data.pa
     screen.move(70,6)
     screen.text('/ ')
     screen.move(81,6)
-    screen.text_right(data[data.pattern].track.div[data.selected[1]])
+    screen.text_right(data[data.pattern].track.div[tr])
     screen.stroke()
   end
+  
   if not k1 then
     screen.level((not view.sampling and data.ui_index == -1) and 5 or 2)  
     screen.rect(85, 0, 9, 7)
@@ -153,19 +156,20 @@ function ui.head(params_data, data, view, k1, rules) -- , selected, data[data.pa
       for i = 1, 16 do
         local offset_y = i <= 8 and 0 or 4
         local offset_x = i <= 8 and 0 or 8
-        local tr = data.selected[1]
-        local s = data.selected[2] and get_step(data.selected[2]) or data[data.pattern].track.pos[tr]
+        
+        local st = s and get_step(data.selected[2]) or data[data.pattern].track.pos[tr]
+        
         screen.level((not view.sampling and data.ui_index == 0) and 5 or 2)
     
-          local step = data[data.pattern][data.selected[1]][s + (i - 1 )]
-          if step == 1 then
-            screen.rect(92 + ((i - offset_x) * 4), offset_y + 1, 2, 2)
-          else
-            screen.rect(91 + ((i - offset_x) * 4), offset_y, 3, 3)
-          end
-    
-          if step == 1 then screen.stroke() else screen.fill() end
-    
+        local step = data[data.pattern][data.selected[1]][st + (i - 1 )]
+        
+        if step == 1 then
+          screen.rect(92 + ((i - offset_x) * 4), offset_y + 1, 2, 2) 
+          screen.stroke()
+        else
+          screen.rect(91 + ((i - offset_x) * 4), offset_y, 3, 3) 
+          screen.fill()
+        end
     end
   else
     screen.level(data.ui_index == -2 and 5 or 2)  
