@@ -284,23 +284,15 @@ local function metaseq(counter)
     end
 end
 
---[[ 2do - propper track scaling 
-1/8X, 1/4X, 1/2X, 3/4X, 1X, 3/2X and 2X. 
-A setting of 1/8X will play back the pattern at one-eighth of the set tempo. 
-3/4X plays the pattern back at three-quarters of the tempo; 
-3/2X will play back the pattern twice as fast as the 3/4X setting. 
-2X will make the pattern play at twice the BPM.
-]]
-
 local dividers  = { 
-  [1] = {16, 0}, -- 1/8x
-  [2] = {8, 0}, -- 1/4x
-  [3] = {4, 0}, -- 1/2x
-  [4] = {3, 0}, -- 3/4x
-  [5] = {2, 0}, -- 1x
-  [6] = {(3/2), 0.5}, -- 3/2x
-  [7] = { 1, 0},    -- 2x
-  
+
+  [1] = 16,  -- 1/8x
+  [2] = 8,   -- 1/4x
+  [3] = 4,   -- 1/2x
+  [4] = 3,   -- 3/4x
+  [5] = 2,   -- 1x
+  [6] = 1.5, -- 3/2x
+  [7] = 1,   -- 2x
 } 
 
 local function seqrun(counter)
@@ -311,8 +303,8 @@ local function seqrun(counter)
       local len = data[data.pattern].track.len[tr]
       local div = data[data.pattern].track.div[tr]
       
-      if (div ~= 6 and counter % dividers[div][1] == dividers[div][2]) 
-      or (div == 6 and counter % dividers[div][1] >= dividers[div][2]) then
+      if (div ~= 6 and counter % dividers[div] == 0) 
+      or (div == 6 and counter % dividers[div] >= 0.5) then
 
         data[data.pattern].track.pos[tr] = util.clamp((data[data.pattern].track.pos[tr] + 1) % (len ), start, len) -- voice pos
         data[data.pattern].track.p_pos[tr] = math.ceil(data[data.pattern].track.pos[tr] / 16)
