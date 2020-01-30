@@ -80,20 +80,30 @@ function ui.head(params_data, data, view, k1, rules, PATTERN_REC) -- , selected,
   
   screen.font_size(6)
   screen.font_face(25)
-  screen.move(2,6)
-  screen.text(PATTERN_REC and 'P!' or 'P')--  .. pattern)
-  screen.move(17,6)
-  screen.text_right(data.pattern or nil )
-  screen.stroke()
+  
+  
+  if not s then 
+    screen.move(2,6)
+    screen.text(PATTERN_REC and 'P!' or 'P')
+    screen.move(17,6)
+    screen.text_right(data.pattern or nil )
+    screen.stroke()
+    
+  else
+    screen.move(11,6)
+    screen.text_center( tr ..':' .. s )
+  end
 
-  screen.level((not view.sampling and data.ui_index == -5 ) and 5 or 2)  
-  screen.rect(22, 0, 20, 7)
-  screen.fill()
-  screen.level(0)
-  screen.move(31,6)
+    screen.level((not view.sampling and data.ui_index == (not s and -5 or -3) ) and 5 or 2)  
+    screen.rect(22, 0, 20, 7)
+    screen.fill()
+    screen.level(0)
+    screen.move(31,6)
   
   if s then 
-    screen.text_center( tr ..':' .. s )
+    
+
+
   else
     screen.text_center( 'TR ' .. tr )
   end

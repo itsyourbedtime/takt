@@ -308,12 +308,9 @@ local function seqrun(counter)
 
           if rule[step_param.rule][2](tr, data[data.pattern].track.p_pos[tr]) then 
             
-            if step_param.lock ~= 1 then
-                step_param = get_params(tr)
-            end
+            step_param = step_param.lock ~= 1 and get_params(tr) or step_param
             
             set_locks(step_param)
-            
             choke_group(tr, step_param.sample)
             engine.noteOn(tr, music.note_num_to_freq(step_param.note), 1, step_param.sample)
             choke[tr] = step_param.sample
@@ -648,7 +645,7 @@ local step_params = {
 
 
 function enc(n,d)
-  norns.encoders.set_sens(1,3)
+  norns.encoders.set_sens(1,4)
   norns.encoders.set_sens(2,3)
   norns.encoders.set_accel(1, false)
   norns.encoders.set_accel(2, false)
@@ -663,7 +660,7 @@ function enc(n,d)
     
     if not view.sampling then
       if not K1_hold then 
-        data.ui_index = util.clamp(data.ui_index + d, not data.selected[2] and 1 or -2, 20)
+        data.ui_index = util.clamp(data.ui_index + d, not data.selected[2] and 1 or -3, 20)
       else
         data.ui_index = util.clamp(data.ui_index + d, -6, -1)
       end
