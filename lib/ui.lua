@@ -16,7 +16,6 @@ local ui = {
         brightness = 0,
     },
 }
-local ui_lib = require("ui")
 
 local speed = 0.2
 
@@ -67,6 +66,9 @@ local function metro_icon(x, y, pos)
   screen.stroke()
 
 end
+
+local dividers  = { '1/8', '1/4', '1/2', '3/4', '--', '3/2', '2x' } 
+
 
 function ui.head(params_data, data, view, k1, rules, PATTERN_REC) -- , selected, data[data.pattern].track, data, data.ui_index)
   local tr = data.selected[1]
@@ -146,10 +148,8 @@ function ui.head(params_data, data, view, k1, rules, PATTERN_REC) -- , selected,
     screen.rect(69, 0, 15, 7)
     screen.fill()
     screen.level(0)
-    screen.move(70,6)
-    screen.text('/ ')
-    screen.move(81,6)
-    screen.text_right(data[data.pattern].track.div[tr])
+    screen.move(76,6)
+    screen.text_center(dividers[data[data.pattern].track.div[tr]])
     screen.stroke()
   end
   

@@ -133,7 +133,7 @@ end
 
 local function set_bpm(n)
     data[data.pattern].bpm = n
-    sequencer_metro.time = 60 / data[data.pattern].bpm  / 16 --[[ppqn]] / 4 
+    sequencer_metro.time = 60 / (data[data.pattern].bpm * 2)  / 16 --[[ppqn]] / 4 
     midi_clock:bpm_change(data[data.pattern].bpm)
 end
 
@@ -284,14 +284,35 @@ local function metaseq(counter)
     end
 end
 
+--[[ 2do - propper track scaling 
+1/8X, 1/4X, 1/2X, 3/4X, 1X, 3/2X and 2X. 
+A setting of 1/8X will play back the pattern at one-eighth of the set tempo. 
+3/4X plays the pattern back at three-quarters of the tempo; 
+3/2X will play back the pattern twice as fast as the 3/4X setting. 
+2X will make the pattern play at twice the BPM.
+]]
+
+local dividers  = { 
+  [1] = {16, 0}, -- 1/8x
+  [2] = {8, 0}, -- 1/4x
+  [3] = {4, 0}, -- 1/2x
+  [4] = {3, 0}, -- 3/4x
+  [5] = {2, 0}, -- 1x
+  [6] = {(3/2), 0.5}, -- 3/2x
+  [7] = { 1, 0},    -- 2x
+  
+} 
+
 local function seqrun(counter)
 
   for tr = 1, 7 do
 
       local start = data[data.pattern].track.start[tr]
       local len = data[data.pattern].track.len[tr]
-
-      if counter % data[data.pattern].track.div[tr]== 0 then
+      local div = data[data.pattern].track.div[tr]
+      
+      if (div ~= 6 and counter % dividers[div][1] == dividers[div][2]) 
+      or (div == 6 and counter % dividers[div][1] >= dividers[div][2]) then
 
         data[data.pattern].track.pos[tr] = util.clamp((data[data.pattern].track.pos[tr] + 1) % (len ), start, len) -- voice pos
         data[data.pattern].track.p_pos[tr] = math.ceil(data[data.pattern].track.pos[tr] / 16)
@@ -433,16 +454,6 @@ function init()
       second[i] = 0
     end
 
-
---[[ 2do - propper track scaling 
-1/8X, 1/4X, 1/2X, 3/4X, 1X, 3/2X and 2X. 
-A setting of 1/8X will play back the pattern at one-eighth of the set tempo. 
-3/4X plays the pattern back at three-quarters of the tempo; 
-3/2X will play back the pattern twice as fast as the 3/4X setting. 
-2X will make the pattern play at twice the BPM.
-]]
-
-
     for t = 1, 16 do
       data[t] = {
         bpm = 120,
@@ -452,7 +463,7 @@ A setting of 1/8X will play back the pattern at one-eighth of the set tempo.
             p_pos =  { 0, 0, 0, 0, 0, 0, 0 },
             start =  { 1, 1, 1, 1, 1, 1, 1 },
             len = { 256, 256, 256, 256, 256, 256, 256 },
-            div = { 1, 1, 1, 1, 1, 1, 1 },
+            div = { 5, 5, 5, 5, 5, 5, 5 },
             cycle = {1, 1, 1, 1, 1, 1, 1 },
           },
     }
@@ -503,7 +514,7 @@ A setting of 1/8X will play back the pattern at one-eighth of the set tempo.
   
 
     sequencer_metro = metro.init()
-    sequencer_metro.time = 60 / data[data.pattern].bpm  / 16 --[[ppqn]] / 4 
+    sequencer_metro.time = 60 / (data[data.pattern].bpm * 2) / 16 --[[ppqn]] / 4 
     sequencer_metro.event = function(stage) seqrun(stage) metaseq(stage) end
 
     redraw_metro = metro.init(function(stage) redraw() g:redraw() blink = (blink + 1) % 17 end, 1/30)
@@ -832,8 +843,10 @@ function g.key(x, y, z)
               engine.noteOff(choke[y])
             end
           else
-            data[data.pattern].track.div[y] = x
-            sync_tracks(y)
+            if x < 8 then
+              data[data.pattern].track.div[y] = x
+              sync_tracks(y)
+            end
           end
         end
         
@@ -939,6 +952,10 @@ function g.redraw()
         
       elseif not view.patterns then
         if SHIFT then
+                        
+            if y < 8 and x < 8 then
+              g:led(x, y, 3)
+            end
           
             g:led(data[data.pattern].track.div[y], y, 15)
             g:led(16, y, data[data.pattern].track.mute[y] and 15 or 6 )
@@ -950,10 +967,10 @@ function g.redraw()
             if x >= t_start and x <= t_len then
               g:led(x, y, 3)
             end
-
+        end
           
-        else
-          
+        
+        if not SHIFT then
           local p = (x * 16) - 15
           for s = 0, 15 do
             if data[data.pattern][y][p + s] == 1 then
@@ -961,8 +978,8 @@ function g.redraw()
               g:led(x, y, level ) 
             end
           end
-          
         end
+        
       else
         
         for i = 1, 16 do
