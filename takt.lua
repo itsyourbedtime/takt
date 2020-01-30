@@ -75,9 +75,6 @@ local param_ids = {
       ['release'] = "amp_env_release",
 }
 
-
-
-
 local rule = {
   [0] =  { 'OFF', function() return true end },
   [1] =  { '10%', function() return 10 >= math.random(100) and true or false end },
@@ -275,8 +272,6 @@ local function set_locks(step_param)
     end
 end
 
-
-
 local function metaseq(counter)
     if data[data.pattern].track.pos[1] >= data[data.pattern].track.len[1] - 1 then
       data.pattern = data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from
@@ -285,7 +280,6 @@ local function metaseq(counter)
 end
 
 local dividers  = { 
-
   [1] = 16,  -- 1/8x
   [2] = 8,   -- 1/4x
   [3] = 4,   -- 1/2x
@@ -553,7 +547,7 @@ local step_params = {
       set_bpm(util.clamp(data[data.pattern].bpm + d, 1, 999))
   end,
   [-3] = function(tr, s, d) -- rnd
-      data[data.pattern].track.div[tr] = util.clamp(data[data.pattern].track.div[tr] + d, 1, 16)
+      data[data.pattern].track.div[tr] = util.clamp(data[data.pattern].track.div[tr] + d, 1, 7)
       sync_tracks(tr)
   end,
   [-2] = function(tr, s, d) -- rule
@@ -998,7 +992,7 @@ function g.redraw()
   local glow = util.clamp(blink,5,15)
   
   g:led(1, 8,  sequencer_metro.is_running and 15 or 6 )
-  g:led(3, 8,  (view.notes_input and PATTERN_REC) and glow or view.notes_input and 6 or  0)
+  g:led(3, 8,  (view.notes_input and PATTERN_REC) and glow or view.notes_input and 6 or 0)
   g:led(8, 8,  view.steps_engine and 15  or  6)
   g:led(9, 8,  view.notes_input and 15 or  6)
   g:led(10, 8, view.sampling and 15 or 6)
