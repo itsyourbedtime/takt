@@ -41,15 +41,15 @@ function linn.note_at(i)
   local o = tonumber(n:sub(2, 2))
   local s = n:match('#')
   local p = n:gsub(o,'')
-  local v = index_of(keys,p) + (12 * (o+2)) - 1
+  local v = index_of(keys, p) + (12 * (o + 2)) - 1
   local l = 0
 
   if p == 'C' then
     l = 15
   elseif s then
-    l = 0
+    l = 2
   else
-    l = 5
+    l = 6
   end
 
   return { i = i, k = k, o = o, s = s, v = v, l = l, p = p }
@@ -89,9 +89,10 @@ function linn.grid_redraw(g)
   for i=1,111 do 
     pos = linn.pos_at(i)  
     note = linn.note_at(i)
-    g:led(pos.x,pos.y,note.l)
+    g:led(pos.x,pos.y, note.l)
   end
   g:led(focus.x,focus.y, 10)
+  g:led(16,1,3) --dunno fix last btn
 end
 
 
