@@ -123,7 +123,6 @@ end
 local function reset_positions()
   for i = 1, 7 do
     data[data.pattern].track.pos[i] = 0
-    data[data.pattern].track.p_pos[i] = 0
   end
 end
 
@@ -150,7 +149,7 @@ local function load_project(pth)
       
       for t = 1, 16 do
         for l = 1, 7 do
-          for k = 1, 16 do
+          for k = 1, 256 do
             data[t][l].params[k] = saved[2][t][l].params[k]
            setmetatable(data[t][l].params[k], {__index =  data[t][l].params['TR'..l]})
           end
@@ -301,7 +300,6 @@ local function seqrun(counter)
       or (div == 6 and counter % dividers[div] >= 0.5) then
 
         data[data.pattern].track.pos[tr] = util.clamp((data[data.pattern].track.pos[tr] + 1) % (len ), start, len) -- voice pos
-        data[data.pattern].track.p_pos[tr] = math.ceil(data[data.pattern].track.pos[tr] / 16)
         data[data.pattern].track.cycle[tr] = counter % 256 == 0 and data[data.pattern].track.cycle[tr] + 1 or data[data.pattern].track.cycle[tr]  --data[data.pattern].track.cycle[tr]
 
         local mute = data[data.pattern].track.mute[tr]
@@ -312,10 +310,10 @@ local function seqrun(counter)
           
           set_locks(data[data.pattern][tr].params['TR'..tr])
           
-          local step_param = get_params(tr, pos) -- data[data.pattern].track.p_pos[tr])
+          local step_param = get_params(tr, pos)
 
 
-          if rule[step_param.rule][2](tr, pos) then -- data[data.pattern].track.p_pos[tr]) then 
+          if rule[step_param.rule][2](tr, pos) then 
             step_param = step_param.lock ~= 1 and get_params(tr) or step_param
             set_locks(step_param)
             choke_group(tr, step_param.sample)
@@ -452,7 +450,6 @@ function init()
         track = {
             mute = { false, false, false, false, false, false, false },
             pos = { 0, 0, 0, 0, 0, 0, 0 },
-            p_pos =  { 0, 0, 0, 0, 0, 0, 0 },
             start =  { 1, 1, 1, 1, 1, 1, 1 },
             len = { 256, 256, 256, 256, 256, 256, 256 },
             div = { 5, 5, 5, 5, 5, 5, 5 },
