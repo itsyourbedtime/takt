@@ -34,7 +34,7 @@ function engines.load_folder(file, add)
     end
   end
   
-  Timber.clear_samples(sample_id, NUM_SAMPLES - 1)
+  Timber.clear_samples(sample_id, NUM_SAMPLES)
   
   local split_at = string.match(file, "^.*()/")
   local folder = string.sub(file, 1, split_at)

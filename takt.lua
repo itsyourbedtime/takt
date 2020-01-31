@@ -332,13 +332,20 @@ local function clear_substeps(tr, s )
     --local l = get_step(s) 
     for l = s, s + 15 do
       data[data.pattern][tr][l] = 0
+      data[data.pattern][tr].params[l] = {}
+      setmetatable(data[data.pattern][tr].params[l], {__index =  data[data.pattern][tr].params['TR'..tr]})
     end
 end
+local function move_params(tr, src, dst )
+     data[data.pattern][tr].params[src], data[data.pattern][tr].params[dst] = data[data.pattern][tr].params[dst], data[data.pattern][tr].params[src]
+end
+
 
 local function move_substep(tr, step, t)
      for s = step, step + 15 do
-      data[data.pattern][tr][s] = (s == t) and 1 or 0 
-    end
+      data[data.pattern][tr][s] = (s == t) and 1 or 0
+      move_params(tr, step, (s == t) and s or 1) 
+     end
 end
 
 local function make_retrigs(tr, step, t)
@@ -555,8 +562,9 @@ local step_params = {
       make_retrigs(tr, s, data[data.pattern][tr].params[s].retrig)
   end,
   [0] = function(tr, s, d) -- offset
-      data[data.pattern][tr].params[s].offset = util.clamp(data[data.pattern][tr].params[s].offset + d, 0, 15)
+      data[data.pattern][tr].params[s + data[data.pattern][tr].params[s].offset].offset = util.clamp(data[data.pattern][tr].params[s].offset + d, 0, 15)
       move_substep(tr, s, s + data[data.pattern][tr].params[s].offset)
+      --move_params(tr, s, s + data[data.pattern][tr].params[s].offset)
       data[data.pattern][tr].params[s].retrig = 0
   end,
   [1] = function(tr, s, d) -- sample
@@ -871,9 +879,6 @@ function g.key(x, y, z)
 
             clear_substeps(y, x)
             
-            data[data.pattern][y].params[x] = {}
-            setmetatable(data[data.pattern][y].params[x], {__index =  data[data.pattern][y].params['TR'..y]})
-       
             data.selected = { y, false }
     
           end

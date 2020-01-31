@@ -236,7 +236,7 @@ local function sample_load_failed(id, error_status)
 end
 
 function Timber.clear_samples(first, last)
-  first = first or 0
+  first = first or 1
   last = last or first
   if last < first then last = first end
   
