@@ -84,11 +84,13 @@ specs.MOD_ENV_ATTACK = ControlSpec.new(0.003, 5, "lin", 0, 1, "s")
 specs.MOD_ENV_DECAY = ControlSpec.new(0.003, 5, "lin", 0, 2, "s")
 specs.MOD_ENV_SUSTAIN = ControlSpec.new(0, 1, "lin", 0, 0.65, "")
 specs.MOD_ENV_RELEASE = ControlSpec.new(0.003, 10, "lin", 0, 1, "s")
-options.QUALITY = {"Nasty", "Low", "Medium", "High"}
+options.QUALITY = {"Nasty", "Low", "SP-1200", "Medium", "High"}
 specs.AMP = ControlSpec.new(-48, 16, 'db', 0, 0, "dB")
 
-QUALITY_SAMPLE_RATES = {8000, 16000, 32000, 48000}
-QUALITY_BIT_DEPTHS = {8, 10, 12, 24}
+
+-- 27khz - 8 bit, 
+QUALITY_SAMPLE_RATES = { 8000, 16000, 26040, 32000, 48000 }
+QUALITY_BIT_DEPTHS = { 8, 12, 12, 16, 24 }
 
 local function default_sample()
   local sample = {

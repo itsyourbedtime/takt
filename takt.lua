@@ -305,18 +305,18 @@ local function seqrun(counter)
         data[data.pattern].track.cycle[tr] = counter % 256 == 0 and data[data.pattern].track.cycle[tr] + 1 or data[data.pattern].track.cycle[tr]  --data[data.pattern].track.cycle[tr]
 
         local mute = data[data.pattern].track.mute[tr]
-        local pos = data[data.pattern][tr][data[data.pattern].track.pos[tr]]
+        local pos = data[data.pattern].track.pos[tr]
+        local trig = data[data.pattern][tr][pos]
         
-        if pos == 1 and not mute then
+        if trig == 1 and not mute then
           
           set_locks(data[data.pattern][tr].params['TR'..tr])
           
-          local step_param = get_params(tr, data[data.pattern].track.p_pos[tr])
+          local step_param = get_params(tr, pos) -- data[data.pattern].track.p_pos[tr])
 
-          if rule[step_param.rule][2](tr, data[data.pattern].track.p_pos[tr]) then 
-            
+
+          if rule[step_param.rule][2](tr, pos) then -- data[data.pattern].track.p_pos[tr]) then 
             step_param = step_param.lock ~= 1 and get_params(tr) or step_param
-            
             set_locks(step_param)
             choke_group(tr, step_param.sample)
             engine.noteOn(tr, music.note_num_to_freq(step_param.note), 1, step_param.sample)
@@ -329,9 +329,9 @@ local function seqrun(counter)
 end
 
 local function clear_substeps(tr, s )
-    local l = get_step(s) 
-    for s = l, l + 15 do
-      data[data.pattern][tr][s] = 0
+    --local l = get_step(s) 
+    for l = s, s + 15 do
+      data[data.pattern][tr][l] = 0
     end
 end
 
@@ -345,7 +345,7 @@ local function make_retrigs(tr, step, t)
     local t = 16 - t 
     local offset = data[data.pattern][tr].params[step].offset
     
-    local st = get_step(step) + 1
+    local st = step + 1
 
     for s = st + offset, (st + 14) - offset do
       if t == 16 then
@@ -376,11 +376,10 @@ local function get_tr_len( tr )
 end
 
 local function place_note(tr, step, note)
-  local p_step = math.ceil(step / 16)
   local note_num = note
   data[data.pattern][tr][step] = 1
-  data[data.pattern][tr].params[p_step].lock = 1
-  data[data.pattern][tr].params[p_step].note = note_num
+  data[data.pattern][tr].params[step].lock = 1
+  data[data.pattern][tr].params[step].note = note_num
 end
 
 local function midi_event(d)
@@ -475,7 +474,7 @@ function init()
             ftype = 1,
             cutoff = 20000,
             resonance = 0,
-            sr = 4,
+            sr = 5,
             freq_lfo1 = 0,
             freq_lfo2 = 0,
             amp_lfo1 = 0,
@@ -489,12 +488,10 @@ function init()
     
         for i=0,256 do
           data[t][l][i] = 0
+          data[t][l].params[i] = {}
+          setmetatable(data[t][l].params[i], {__index =  data[t][l].params['TR'..l]})
         end
         
-        for k = 1, 16 do
-          data[t][l].params[k] = {}
-         setmetatable(data[t][l].params[k], {__index =  data[t][l].params['TR'..l]})
-        end
       end
     end
   
@@ -559,7 +556,7 @@ local step_params = {
   end,
   [0] = function(tr, s, d) -- offset
       data[data.pattern][tr].params[s].offset = util.clamp(data[data.pattern][tr].params[s].offset + d, 0, 15)
-      move_substep(tr, get_step(s), get_step(s) + data[data.pattern][tr].params[s].offset)
+      move_substep(tr, s, s + data[data.pattern][tr].params[s].offset)
       data[data.pattern][tr].params[s].retrig = 0
   end,
   [1] = function(tr, s, d) -- sample
@@ -618,7 +615,7 @@ local step_params = {
 
   end,
   [15] = function(tr, s, d) -- sample rate
-      data[data.pattern][tr].params[s].sr = util.clamp(data[data.pattern][tr].params[s].sr + d, 1, 4)
+      data[data.pattern][tr].params[s].sr = util.clamp(data[data.pattern][tr].params[s].sr + d, 1, 5)
   end,
   [16] = function(tr, s, d) -- filter type
       data[data.pattern][tr].params[s].ftype = util.clamp(data[data.pattern][tr].params[s].ftype + d, 1, 2)
@@ -669,17 +666,24 @@ function enc(n,d)
   elseif n == 3 then
     if not view.sampling then
       local p = is_lock()
+      local t = type(p) == 'number' and get_step(p) or p
+
       
-      if data.selected[2] then 
-        data[data.pattern][tr].params[s].lock = 1 
-      end 
+      data[data.pattern][tr].params[t].lock = data.selected[2] and 1 or 0
       
-      step_params[data.ui_index](tr, p, d)
-      if not data.selected[2] then
-          set_locks(get_params(tr))
+      if type(p) == 'string' then
+        step_params[data.ui_index](tr, p, d)
+      else
+        if data.ui_index > 0 then
+          for i = t, t + 15 do step_params[data.ui_index](tr, i, d) end
+        else
+          step_params[data.ui_index](tr, t, d)
+        end
       end
-    else
       
+      if not data.selected[2] then set_locks(get_params(tr)) end
+      
+    else
       sampling_params[data.ui_index](d)
     end
   end
@@ -726,25 +730,18 @@ function key(n,z)
   end
 end
 
-
-
-
-
-
 function redraw()
 
   local tr = data.selected[1]
-  local params_data = get_params(data.selected[1])
-
-  local lockd = data[data.pattern][tr].params[data[data.pattern].track.p_pos[tr]]
+  local pos = data[data.pattern].track.pos[tr]
+  local params_data = get_params(data.selected[1], sequencer_metro.is_running and pos or false, true)
+  local step_params = data[data.pattern][tr].params[pos]
+  local trig = data[data.pattern][tr][pos]
   
   if data.selected[2] then
-    params_data = get_params(data.selected[1], data.selected[2], true)
-  elseif lockd and lockd.lock  == 1 then 
-    params_data = get_params(data.selected[1], data[data.pattern].track.p_pos[data.selected[1]], true)
-    
+    params_data = get_params(data.selected[1], get_step(data.selected[2]), true)
   end
-
+  
   screen.clear()
   
   ui.head(params_data, data, view, K1_hold, rule, PATTERN_REC)
@@ -864,9 +861,10 @@ function g.key(x, y, z)
           
           hold_time = util.time() - down_time
           held = hold_time > 0.2 and true or false
-          
+          x = get_step(x)
           if not cond then
-            data[data.pattern][y][get_step(x)] = 1
+            
+            data[data.pattern][y][x] = 1
 
           elseif cond and not held then
 
