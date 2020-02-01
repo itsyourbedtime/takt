@@ -73,7 +73,7 @@ local dividers  = { '1/8', '1/4', '1/2', '3/4', '--', '3/2', '2x' }
 function ui.head(params_data, data, view, k1, rules, PATTERN_REC) -- , selected, data[data.pattern].track, data, data.ui_index)
   local tr = data.selected[1]
   local s = data.selected[2]
-  local p_pos = data[data.pattern].track.p_pos[tr]
+  local pos = data[data.pattern].track.pos[tr]
   
   screen.level((not view.sampling and data.ui_index == -6 ) and 5 or 2)  
   screen.rect(1, 0, 20, 7)
@@ -134,7 +134,7 @@ function ui.head(params_data, data, view, k1, rules, PATTERN_REC) -- , selected,
     screen.rect(43, 0, 25, 7)
     screen.fill()
     screen.level(0)
-    metro_icon(42,1, data[data.pattern].track.p_pos[tr])
+    metro_icon(42,1, pos)
     screen.move(66, 6)
     screen.text_right(data[data.pattern].bpm)
     
