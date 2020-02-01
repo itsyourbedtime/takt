@@ -202,10 +202,11 @@ end
 local function copy_step(src, dst)
     for i = 0, 15 do
       data[data.pattern][dst[1]][get_step(dst[2]) + i] = data[data.pattern][src[1]][get_step(src[2]) + i]
-    end
-
-    for k,v in pairs(data[data.pattern][src[1]].params[src[2]]) do
-      data[data.pattern][dst[1]].params[dst[2]][k]  = v
+      
+        for k,v in pairs(data[data.pattern][src[1]].params[get_step(src[2]) + i]) do
+          data[data.pattern][dst[1]].params[get_step(dst[2]) + i][k]  = v
+        end
+        
     end
 end
 
