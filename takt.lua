@@ -43,7 +43,6 @@ data = {
     length = 60,
     slot = 1, 
   },
-
   metaseq = { from = 1, to = 1 },
 
 }
@@ -53,26 +52,14 @@ local view = { steps_engine = true, notes_input = false, sampling = false, patte
 
 local choke = { 1, 2, 3, 4, 5, 6, 7 }
 
+local dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 2, [6] = 1.5, [7] = 1,} 
+
 local param_ids = {
-      ['sr'] = "quality",  
-      --['mode'] = "play_mode", 
-      ['start'] = "start_frame", 
-      ['s_end'] = "end_frame",
-      ['freq_lfo1'] = "freq_mod_lfo_1", 
-      ['freq_lfo2'] = "freq_mod_lfo_2", 
-      ['ftype'] = "filter_type", 
-      ['cutoff'] = "filter_freq", 
-      ['resonance'] = "filter_resonance", 
-      ['cut_lfo1'] = "filter_freq_mod_lfo_1", 
-      ['cut_lfo2'] = "filter_freq_mod_lfo_2", 
-      ['pan'] = "pan",
-      ['vol'] = "amp", 
-      ['amp_lfo1'] = "amp_mod_lfo_1", 
-      ['amp_lfo2'] = "amp_mod_lfo_2",
-      ['attack'] = "amp_env_attack",
-      ['decay'] = "amp_env_decay", 
-      ['sustain'] = "amp_env_sustain", 
-      ['release'] = "amp_env_release",
+      ['sr'] = "quality", ['start'] = "start_frame", ['s_end'] = "end_frame", ['freq_lfo1'] = "freq_mod_lfo_1", 
+      ['freq_lfo2'] = "freq_mod_lfo_2", ['ftype'] = "filter_type", ['cutoff'] = "filter_freq", ['resonance'] = "filter_resonance", 
+      ['cut_lfo1'] = "filter_freq_mod_lfo_1", ['cut_lfo2'] = "filter_freq_mod_lfo_2", ['pan'] = "pan", ['vol'] = "amp", 
+      ['amp_lfo1'] = "amp_mod_lfo_1", ['amp_lfo2'] = "amp_mod_lfo_2", ['attack'] = "amp_env_attack", ['decay'] = "amp_env_decay", 
+      ['sustain'] = "amp_env_sustain", ['release'] = "amp_env_release",
 }
 
 local rule = {
@@ -130,7 +117,7 @@ end
 local function set_bpm(n)
     data[data.pattern].bpm = n
     sequencer_metro.time = 60 / (data[data.pattern].bpm * 2)  / 16 --[[ppqn]] / 4 
-    midi_clock:bpm_change(data[data.pattern].bpm)
+    midi_clock:bpm_change(data[data.pattern].bpm * dividers[data[data.pattern].sync_div])
 end
 
 local function load_project(pth)
@@ -278,16 +265,6 @@ local function metaseq(counter)
     end
 end
 
-local dividers  = { 
-  [1] = 16,  -- 1/8x
-  [2] = 8,   -- 1/4x
-  [3] = 4,   -- 1/2x
-  [4] = 3,   -- 3/4x
-  [5] = 2,   -- 1x
-  [6] = 1.5, -- 3/2x
-  [7] = 1,   -- 2x
-} 
-
 local function seqrun(counter)
 
   for tr = 1, 7 do
@@ -327,12 +304,11 @@ local function seqrun(counter)
 end
 
 local function clear_substeps(tr, s )
-    --local l = get_step(s) 
-    for l = s, s + 15 do
-      data[data.pattern][tr][l] = 0
-      data[data.pattern][tr].params[l] = {}
-      setmetatable(data[data.pattern][tr].params[l], {__index =  data[data.pattern][tr].params['TR'..tr]})
-    end
+  for l = s, s + 15 do
+    data[data.pattern][tr][l] = 0
+    data[data.pattern][tr].params[l] = {}
+    setmetatable(data[data.pattern][tr].params[l], {__index =  data[data.pattern][tr].params['TR'..tr]})
+  end
 end
 local function move_params(tr, src, dst )
      data[data.pattern][tr].params[src], data[data.pattern][tr].params[dst] = data[data.pattern][tr].params[dst], data[data.pattern][tr].params[src]
@@ -447,6 +423,7 @@ function init()
     for t = 1, 16 do
       data[t] = {
         bpm = 120,
+        sync_div = 5,
         track = {
             mute = { false, false, false, false, false, false, false },
             pos = { 0, 0, 0, 0, 0, 0, 0 },
@@ -508,7 +485,7 @@ function init()
     redraw_metro:start()
     midi_clock = beatclock:new()
     midi_clock.on_step = function() end
-    midi_clock:bpm_change(data[data.pattern].bpm)
+    midi_clock:bpm_change(data[data.pattern].bpm * dividers[data[data.pattern].sync_div])
     midi_clock.send = true
 
     engines.init()
@@ -537,19 +514,30 @@ local maxval = params:lookup_param("end_frame_" .. data[data.pattern][tr].params
   end
 end
 
-local step_params = {
+local track_params = {
   [-6] = function(tr, s, d) -- ptn
       data.pattern = (util.clamp(data.pattern + d, 1, 16))
   end,
   [-5] = function(tr, s, d) -- rnd
       data.selected[1] = util.clamp(data.selected[1] + d, 1, 7)
   end,
-  [-4] = function(tr, s, d) -- rnd
+  [-4] = function(tr, s, d) -- global bpm
       set_bpm(util.clamp(data[data.pattern].bpm + d, 1, 999))
   end,
-  [-3] = function(tr, s, d) -- rnd
+  [-3] = function(tr, s, d) -- track scale
       data[data.pattern].track.div[tr] = util.clamp(data[data.pattern].track.div[tr] + d, 1, 7)
       sync_tracks(tr)
+  end,
+  [-2] = function(tr, s, d) -- midi out bpm scale
+      data[data.pattern].sync_div = util.clamp(data[data.pattern].sync_div + d, 1, 7)
+  end,
+  [-1] = function(tr, s, d) -- 
+
+  end,  
+}
+
+local step_params = {
+  [-3] = function(tr, s, d) -- 
   end,
   [-2] = function(tr, s, d) -- rule
       data[data.pattern][tr].params[s].rule = util.clamp(data[data.pattern][tr].params[s].rule + d, 0, #rule)
@@ -561,7 +549,6 @@ local step_params = {
   [0] = function(tr, s, d) -- offset
       data[data.pattern][tr].params[s + data[data.pattern][tr].params[s].offset].offset = util.clamp(data[data.pattern][tr].params[s].offset + d, 0, 15)
       move_substep(tr, s, s + data[data.pattern][tr].params[s].offset)
-      --move_params(tr, s, s + data[data.pattern][tr].params[s].offset)
       data[data.pattern][tr].params[s].retrig = 0
   end,
   [1] = function(tr, s, d) -- sample
@@ -675,19 +662,21 @@ function enc(n,d)
 
       
       data[data.pattern][tr].params[t].lock = data.selected[2] and 1 or 0
-      
-      if type(p) == 'string' then
-        step_params[data.ui_index](tr, p, d)
+      if K1_hold then
+        track_params[data.ui_index](tr, p, d)
       else
-        if data.ui_index > 0 then
-          for i = t, t + 15 do step_params[data.ui_index](tr, i, d) end
+        if type(p) == 'string' then
+          step_params[data.ui_index](tr, p, d)
         else
-          step_params[data.ui_index](tr, t, d)
+          if data.ui_index > 0 then
+            for i = t, t + 15 do step_params[data.ui_index](tr, i, d) end
+          else
+            step_params[data.ui_index](tr, t, d)
+          end
         end
-      end
       
       if not data.selected[2] then set_locks(get_params(tr)) end
-      
+      end
     else
       sampling_params[data.ui_index](d)
     end

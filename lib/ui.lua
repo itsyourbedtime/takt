@@ -67,7 +67,7 @@ local function metro_icon(x, y, pos)
 
 end
 
-local dividers  = { '1/8', '1/4', '1/2', '3/4', '--', '3/2', '2x' } 
+local dividers  = {'1/8', '1/4', '1/2', '3/4', '--', '3/2', '2x' } 
 
 
 function ui.head(params_data, data, view, k1, rules, PATTERN_REC) -- , selected, data[data.pattern].track, data, data.ui_index)
@@ -186,8 +186,10 @@ function ui.head(params_data, data, view, k1, rules, PATTERN_REC) -- , selected,
     screen.rect(85, 0, 20, 7)
     screen.fill()
     screen.level(0)
-    screen.move(89,6)
-    --screen.text_center('SETTINGS')
+    screen.move(87,6)
+    screen.text('S')
+    screen.move(103,6)
+    screen.text_right(dividers[data[data.pattern].sync_div])
     screen.stroke()    
     
     screen.level(data.ui_index == -1 and 5 or 2)  
