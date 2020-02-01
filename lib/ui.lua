@@ -465,17 +465,17 @@ local name_lookup = {
   ['NOTE'] = 'note',
   ['STRT'] = 'start',
   ['END'] = 's_end',
-  ['LFO1'] = 'freq_lfo1',
-  ['LFO2'] = 'freq_lfo2',
+  ['FM1'] = 'freq_lfo1',
+  ['FM2'] = 'freq_lfo2',
   ['VOL'] = 'vol',
   ['PAN'] = 'pan',
   ['ENV'] = 'env',
-  ['LFO1'] = 'amp_lfo1',
-  ['LFO2'] = 'amp_lfo2',
+  ['AM1'] = 'amp_lfo1',
+  ['AM2'] = 'amp_lfo2',
   ['SR'] = 'sr',
   ['TYPE'] = 'ftype',
-  ['LFO1'] = 'cut_lfo1',
-  ['LFO2'] = 'cut_lfo2',
+  ['CM1'] = 'cut_lfo1',
+  ['CM2'] = 'cut_lfo2',
 }
 
 
@@ -511,7 +511,7 @@ function ui.main_screen(params_data, data)
           elseif v[2] == 'TYPE' then
             lock = f_types[params_data.default[name_lookup[v[2]]]] ~= v[3] and true or false
           else
-            lock = params_data.default[name_lookup[v[2]]] ~= params_data[name_lookup[v[2]]]  and true or false
+            lock = params_data.default[name_lookup[v[2]]] ~= params_data[name_lookup[v[2]]] and true or false
           end
         end
         
@@ -519,7 +519,7 @@ function ui.main_screen(params_data, data)
       if v[3] and type(v[3]) == 'function' then
         v[3](v[1], v[2], lock)
       elseif v[3] then
-        ui.tile(v[1], v[2], v[3], data.ui_index, lock or false)
+        ui.tile(v[1], v[2], v[3], data.ui_index, lock )
       end
     end
 end

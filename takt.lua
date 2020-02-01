@@ -325,7 +325,7 @@ end
 local function make_retrigs(tr, step, t)
     local t = 16 - t 
     local offset = data[data.pattern][tr].params[step].offset
-    
+    local params = data[data.pattern][tr].params[step]
     local st = step + 1
 
     for s = st + offset, (st + 14) - offset do
@@ -335,6 +335,7 @@ local function make_retrigs(tr, step, t)
         data[data.pattern][tr][s] = s - offset == st and 1 or 0
       else
         data[data.pattern][tr][s] = ((s + offset) % t == 0) and 1 or 0
+        data[data.pattern][tr].params[s] = params
       end
     end
 end
