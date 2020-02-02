@@ -27,7 +27,7 @@ local ptn_copy = false
 
 local g = grid.connect()
 
-data = {
+local data = {
   pattern = 1,
   ui_index = 1,
   selected = { 1, false }, 
@@ -138,7 +138,7 @@ local function load_project(pth)
         for l = 1, 7 do
           for k = 1, 256 do
             data[t][l].params[k] = saved[2][t][l].params[k]
-           setmetatable(data[t][l].params[k], {__index =  data[t][l].params['TR'..l]})
+           setmetatable(data[t][l].params[k], {__index =  data[t][l].params[tostring(l)]})
           end
         end
       end
@@ -214,11 +214,11 @@ end
 
 local function get_params(tr, step, lock)
     if not step then
-      return data[data.pattern][tr].params['TR' .. tr]
+      return data[data.pattern][tr].params[tostring(tr)]
     else
       local res = data[data.pattern][tr].params[step] 
       if lock then 
-        res.default = data[data.pattern][tr].params['TR' .. tr]
+        res.default = data[data.pattern][tr].params[tostring(tr)]
 
       end
       return data[data.pattern][tr].params[step] -- res
@@ -228,7 +228,7 @@ end
 local function is_lock()
     local src = data.selected
     if src[2] == false then
-      return 'TR' .. src[1]
+      return tostring(src[1])
     else
       return src[2]
     end
@@ -286,7 +286,7 @@ local function seqrun(counter)
         if trig == 1 and not mute then
           
 
-          set_locks(data[data.pattern][tr].params['TR'..tr])
+          set_locks(data[data.pattern][tr].params[tostring(tr)])
           
           local step_param = get_params(tr, pos)
           
@@ -310,7 +310,7 @@ local function clear_substeps(tr, s )
   for l = s, s + 15 do
     data[data.pattern][tr][l] = 0
     data[data.pattern][tr].params[l] = {}
-    setmetatable(data[data.pattern][tr].params[l], {__index =  data[data.pattern][tr].params['TR'..tr]})
+    setmetatable(data[data.pattern][tr].params[l], {__index =  data[data.pattern][tr].params[tostring(tr)]})
   end
 end
 local function move_params(tr, src, dst )
@@ -384,7 +384,7 @@ local function midi_event(d)
   -- Note on
   elseif msg.type == "note_on" then
     engine.noteOff(tr)
-    engine.noteOn(tr, music.note_num_to_freq(msg.note), msg.vel / 127, data[data.pattern][tr].params['TR'..tr].sample)
+    engine.noteOn(tr, music.note_num_to_freq(msg.note), msg.vel / 127, data[data.pattern][tr].params[tostring(tr)].sample)
     if sequencer_metro.is_running and PATTERN_REC then
       place_note(tr, pos, msg.note)
     end
@@ -442,7 +442,7 @@ function init()
   
         data[t][l] = {}
         data[t][l].params = {}
-        data[t][l].params['TR'.. l] = {
+        data[t][l].params[tostring(l)] = {
             offset = 0,
             sample = l,
             note = 60,
@@ -475,7 +475,7 @@ function init()
         for i=0,256 do
           data[t][l][i] = 0
           data[t][l].params[i] = {}
-          setmetatable(data[t][l].params[i], {__index =  data[t][l].params['TR'..l]})
+          setmetatable(data[t][l].params[i], {__index =  data[t][l].params[tostring(l)]})
         end
         
       end
@@ -646,7 +646,7 @@ function enc(n,d)
   norns.encoders.set_accel(3, ((data.ui_index == 3 or data.ui_index == 4) and view.steps_engine) and true or false)
 
   local tr = data.selected[1]
-  local s = data.selected[2] and data.selected[2] or 'TR' .. data.selected[1]
+  local s = data.selected[2] and data.selected[2] or tostring(data.selected[1])
   
   if n == 1 then
         data.selected[1] = util.clamp(data.selected[1] + d, 1, 7)
@@ -792,7 +792,7 @@ function g.key(x, y, z)
         local note = linn.grid_key(x, y, z)
         
         if note then 
-            local current = data.selected[2] or 'TR'.. data.selected[1]
+            local current = data.selected[2] or tostring(data.selected[1])
             engine.noteOn(data.selected[1], music.note_num_to_freq(note), 1, data[data.pattern][data.selected[1]].params[current].sample)
         end
         
@@ -830,7 +830,7 @@ function g.key(x, y, z)
           else
             if x < 8 then
               data[data.pattern].track.div[y] = x
-              data[data.pattern][y].params['TR'..y].div = x
+              data[data.pattern][y].params[tostring(y)].div = x
               sync_tracks(y)
             end
           end
@@ -923,7 +923,9 @@ function g.key(x, y, z)
   
 end
 
-function g.redraw() 
+function g.redraw()
+  local glow = util.clamp(blink, 5, 15)
+  
   g:all(0)
   
   if view.notes_input then 
@@ -951,43 +953,43 @@ function g.redraw()
             if x >= t_start and x <= t_len then
               g:led(x, y, 3)
             end
-        end
-          
         
-        if not SHIFT then
-          local p = (x * 16) - 15
-          for s = 0, 15 do
-            if data[data.pattern][y][p + s] == 1 then
-              local level = data.selected[1] == y and data.selected[2] == x and 15 or 10
+        elseif not SHIFT then
+          -- main
+          local substeps = have_substeps(y, x)
+          
+          if substeps then 
+            
+              local t_start = get_tr_start(y)
+              local t_len  = get_tr_len(y)
+              local level = data.selected[1] == y and data.selected[2] == x and 15 
+              or (x < t_start or x > t_len) and 5
+              or data[data.pattern].track.mute[y] and 5
+              or 10
+              
               g:led(x, y, level ) 
-            end
           end
         end
-        
+
       else
-        
-        for i = 1, 16 do
-          
+          -- patterns
           local level =
-          data.pattern == i and sequencer_metro.is_running and  util.clamp(blink, 5, 14)
-          or (i >= data.metaseq.from and i <= data.metaseq.to) and 9 
-          or data.pattern == i and 15 
+          data.pattern == x and sequencer_metro.is_running and  util.clamp(blink, 5, 14)
+          or (x >= data.metaseq.from and x <= data.metaseq.to) and 9 
+          or data.pattern == x and 15 
           or 3
           
-          g:led(i, 1, level)
-        end
+          g:led(x, 1, level)
+
       end
-    end 
-  end
-  
-  if sequencer_metro.is_running and view.steps_engine and not SHIFT then
-    for i = 1, 7 do
-      local pos = math.ceil(data[data.pattern].track.pos[i] / 16)
-      if not data[data.pattern].track.mute[i] then g:led(pos, i, 6 ) end
+    end
+    -- playhead
+    if (not view.patterns and not view.notes_input) and sequencer_metro.is_running and not SHIFT then
+      local pos = math.ceil(data[data.pattern].track.pos[y] / 16)
+      local level = have_substeps(y, pos) and 15 or 6
+      if not data[data.pattern].track.mute[y] then g:led(pos, y, level ) end
     end
   end
-  
-  local glow = util.clamp(blink,5,15)
   
   g:led(1, 8,  sequencer_metro.is_running and 15 or 6 )
   g:led(3, 8,  (view.notes_input and PATTERN_REC) and glow or view.notes_input and 6 or 0)
