@@ -185,18 +185,16 @@ end
 
 local function sync_tracks(tr)
     for i=1, 7 do
-      if data[data.pattern].track.div[i] == data[data.pattern].track.div[tr] then
-        data[data.pattern].track.pos[tr] = data[data.pattern].track.pos[i]
-      end
+      --if data[data.pattern].track.div[i] == data[data.pattern].track.div[tr] then
+        data[data.pattern].track.pos[i] = data[data.pattern].track.pos[tr]
+      --end
     end
 end
 
 local function set_loop(tr, start, len)
-  if start == 1 and len == 16 then
-    sync_tracks(tr)
-  end
     data[data.pattern].track.start[tr] = get_step(start)
     data[data.pattern].track.len[tr] = get_step(len) + 15
+    sync_tracks(tr)
 end
 
 local function copy_step(src, dst)
@@ -260,7 +258,7 @@ local function set_locks(step_param)
 end
 
 local function metaseq(counter)
-    if data[data.pattern].track.pos[1] >= data[data.pattern].track.len[1] - 1 then
+    if data[data.pattern].track.pos[1] == data[data.pattern].track.len[1] - 1 then
       data.pattern = data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from
       set_bpm(data[data.pattern].bpm)
     end
@@ -284,12 +282,16 @@ local function seqrun(counter)
         local pos = data[data.pattern].track.pos[tr]
         local trig = data[data.pattern][tr][pos]
         
+        
         if trig == 1 and not mute then
           
+
           set_locks(data[data.pattern][tr].params['TR'..tr])
           
           local step_param = get_params(tr, pos)
-
+          
+          data[data.pattern].track.div[tr] = step_param.div ~= data[data.pattern].track.div[tr] and step_param.div or data[data.pattern].track.div[tr]
+          --if step_param.div ~= data.
 
           if rule[step_param.rule][2](tr, pos) then 
             step_param = step_param.lock ~= 1 and get_params(tr) or step_param
@@ -467,6 +469,7 @@ function init()
             lock = 0,
             rule = 0,
             retrig = 0,
+            div = 5,
         }
     
         for i=0,256 do
@@ -481,7 +484,7 @@ function init()
 
     sequencer_metro = metro.init()
     sequencer_metro.time = 60 / (data[data.pattern].bpm * 2) / 16 --[[ppqn]] / 4 
-    sequencer_metro.event = function(stage) seqrun(stage) metaseq(stage) end
+    sequencer_metro.event = function(stage) seqrun(stage) if stage % 2 == 0 then metaseq(stage) end end
 
     redraw_metro = metro.init(function(stage) redraw() g:redraw() blink = (blink + 1) % 17 end, 1/30)
     redraw_metro:start()
@@ -519,6 +522,8 @@ end
 local track_params = {
   [-6] = function(tr, s, d) -- ptn
       data.pattern = (util.clamp(data.pattern + d, 1, 16))
+      data.metaseq.from = data.pattern
+      data.metaseq.to = data.pattern
   end,
   [-5] = function(tr, s, d) -- rnd
       data.selected[1] = util.clamp(data.selected[1] + d, 1, 7)
@@ -540,6 +545,7 @@ local track_params = {
 
 local step_params = {
   [-3] = function(tr, s, d) -- 
+    data[data.pattern][tr].params[s].div = util.clamp(data[data.pattern][tr].params[s].div + d, 1, 7)
   end,
   [-2] = function(tr, s, d) -- rule
       data[data.pattern][tr].params[s].rule = util.clamp(data[data.pattern][tr].params[s].rule + d, 0, #rule)
@@ -824,6 +830,7 @@ function g.key(x, y, z)
           else
             if x < 8 then
               data[data.pattern].track.div[y] = x
+              data[data.pattern][y].params['TR'..y].div = x
               sync_tracks(y)
             end
           end

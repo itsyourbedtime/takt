@@ -104,7 +104,7 @@ function ui.head(params_data, data, view, k1, rules, PATTERN_REC) -- , selected,
   
   if s then 
     
-
+    screen.text_center( dividers[params_data.div] )
 
   else
     screen.text_center( 'TR ' .. tr )
