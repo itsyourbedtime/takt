@@ -532,8 +532,12 @@ local track_params = {
       set_bpm(util.clamp(data[data.pattern].bpm + d, 1, 999))
   end,
   [-3] = function(tr, s, d) -- track scale
+    
+      local div = data[data.pattern].track.div[tr]
       data[data.pattern].track.div[tr] = util.clamp(data[data.pattern].track.div[tr] + d, 1, 7)
-      sync_tracks(tr)
+      data[data.pattern][tr].params[tostring(tr)].div = data[data.pattern].track.div[tr]
+      if div ~= data[data.pattern].track.div[tr] then sync_tracks(tr) end
+      
   end,
   [-2] = function(tr, s, d) -- midi out bpm scale
       data[data.pattern].sync_div = util.clamp(data[data.pattern].sync_div + d, 1, 7)
