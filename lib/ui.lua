@@ -278,38 +278,40 @@ function ui.draw_filter(x, y, params_data, ui_index)
 
 end
 
-function ui.draw_mode(x, y, mode, index)
-    set_brightness(4, index)
+function ui.draw_mode(x, y, mode, index, lock)
+    set_brightness(16, index)
     screen.rect(x - 3, y - 15, 20, 17)
     screen.fill()
     screen.level(0)
-    screen.move(x ,y - 8)
+    screen.move(x, y - 8)
     screen.text('MODE')
     screen.stroke()
-    screen.level(0)
-
-  if mode == 1 then -- loop
+    --screen.level(0)
+    
+    local lvl = lock == true and 15 or 0 --
+    screen.level(lvl)
+    if mode == 1  or mode == 2 then -- loop
       
-      screen.move(x + 2, y)
-      screen.line(x + 4, y)
-      screen.move(x + 4, y + 1)
-      screen.line(x + 7, y + 1)
-      screen.move(x + 7, y)
-      screen.line(x + 9, y)
-      screen.move(x + 10, y - 1)
+      screen.move(x + 3, y)
+      screen.line(x + 5, y)
+      screen.move(x + 5, y + 1)
+      screen.line(x + 8, y + 1)
+      screen.move(x + 8, y)
+      screen.line(x + 10, y)
+      screen.move(x + 11, y - 1)
+      screen.line(x + 11, y - 3)
+      screen.move(x + 8, y - 3)
       screen.line(x + 10, y - 3)
-      screen.move(x + 7, y - 3)
-      screen.line(x + 9, y - 3)
-      screen.move(x + 4, y - 4)
-      screen.line(x + 7, y - 4)
-      screen.move(x + 2, y - 3)
-      screen.line(x + 4, y - 3)
-      screen.move(x + 3, y - 2)
-      screen.line(x + 3, y - 6)
-      screen.move(x + 3, y - 2)
-      screen.line(x + 6, y - 2)
-      
-    elseif mode == 2 then -- inf loop
+      screen.move(x + 5, y - 4)
+      screen.line(x + 8, y - 4)
+      screen.move(x + 3, y - 3)
+      screen.line(x + 5, y - 3)
+      screen.move(x + 4, y - 2)
+      screen.line(x + 4, y - 6)
+      screen.move(x + 4, y - 2)
+      screen.line(x + 7, y - 2)
+--[[       
+   elseif mode == 2 then -- inf loop
       
       screen.move(x - 1, y)
       screen.line(x + 1, y)
@@ -337,7 +339,7 @@ function ui.draw_mode(x, y, mode, index)
       screen.font_size(6)
       screen.font_face(25)
       
-    elseif mode == 3 then -- gated
+   elseif mode == 3 then -- gated
       
       screen.move(x + 4, y + 1)
       screen.line(x + 4, y - 6)
@@ -348,19 +350,76 @@ function ui.draw_mode(x, y, mode, index)
       screen.move(x + 6, y + 1)
       screen.line(x + 10, y + 1)
     
-    elseif mode == 1 then -- oneshot
+]]  
+
+    elseif mode == 3 or mode == 4 then -- oneshot
     
       screen.move(x + 1, y - 2)
-      screen.line(x + 10, y - 2)
-      screen.move(x + 8, y - 5)
       screen.line(x + 11, y - 2)
-      screen.move(x + 8, y  )
-      screen.line(x + 11, y - 3)
+      screen.move(x + 9, y - 5)
+      screen.line(x + 12, y - 2)
+      screen.move(x + 9, y  )
+      screen.line(x + 12, y - 3)
       
     end
     screen.stroke()
 end
 
+local function draw_start_end_markers(x, y, w, h, ui_index, params_data, meta, lock)
+  local num_frames = meta.num_frames
+  local start_x = x + 0.5 + util.round((params_data.start / num_frames) * (w - 1))
+  local end_x = x + 0.5 + util.round((params_data.s_end / num_frames) * (w - 1))
+
+  set_brightness(3, ui_index)
+  screen.move(start_x, y)
+  screen.line(start_x, y + h)
+  screen.stroke()
+ 
+  local arrow_direction = 1
+  if start_x > end_x then arrow_direction = -1 end
+  local clamp = util.clamp(start_x + 0.5 * arrow_direction, 0, (x + w) - 1)
+  screen.move(clamp, y + 1)
+  screen.line_rel(2 * arrow_direction, 2)
+  screen.pixel(start_x + 0.5 * arrow_direction, y + 3)
+
+  screen.stroke()
+  
+  set_brightness(4, ui_index)
+  screen.move(end_x, y)
+  screen.line(end_x, y + h)
+  screen.stroke()
+
+  
+end
+
+function ui.draw_waveform(x, y, params_data, ui_index, meta, lock)
+    screen.level(2)
+    screen.rect(x + 1 , y + 1, 40, 16)
+    screen.stroke()
+
+    screen.level(1)
+    for i = 1, 39 do
+          local w = meta.waveform[math.ceil(i * 1.5)] or {0,0}
+          screen.move(x + 1 + i, y + 16)
+          screen.line(x + 1 + i, y + (16 - w[2]*15))
+          screen.stroke()
+    end
+    
+    
+    
+    if meta.waveform[1] then
+      
+      screen.level(2)
+      
+      for _, v in pairs(meta.positions) do
+        local position_x = (x + 0.5 + util.round(v * 39) + 2)
+        screen.move(position_x, y + 16)
+        screen.line(position_x, y + 1 )
+      end
+      screen.stroke()
+      draw_start_end_markers(x + 1, y + 1, 39, 15, ui_index, params_data, meta, lock)
+    end
+end
 
 function ui.draw_note(x, y, params_data, ui_index, count, lock)
   set_brightness(count and count or 2, ui_index)
@@ -462,6 +521,7 @@ end
 
 local name_lookup = {
   ['SMP'] = 'sample',
+  ['MODE'] = 'play_mode',
   ['NOTE'] = 'note',
   ['STRT'] = 'start',
   ['END'] = 's_end',
@@ -479,15 +539,16 @@ local name_lookup = {
 }
 
 
-function ui.main_screen(params_data, data)
+function ui.main_screen(params_data, data, meta)
     local sr_types = { '8k', '16k', '26k', '32k', '48k' }
     local f_types = { 'LPF', 'HPF' } 
   
     local tile = { 
       {1, 'SMP',  params_data.sample },
       {2, 'NOTE', function(_, _, lock) ui.draw_note(22, 8, params_data, data.ui_index, false, lock) end },
-      {3, 'STRT', params_data.start },
-      {4, 'END',   params_data.s_end }, -- function() ui.draw_mode(67, 23, params_data.rev, data.ui_index) end },
+      {3, 'S-E', function(_,_, lock) ui.draw_waveform(43, 8, params_data, data.ui_index, meta, lock) end },
+      --{3, 'STRT', params_data.start },
+      --{4, 'END',   params_data.s_end }, -- function() ui.draw_mode(67, 23, params_data.rev, data.ui_index) end },
       {5, 'FM1', params_data.freq_lfo1 },
       {6, 'FM2', params_data.freq_lfo2 },
       {7, 'VOL', params_data.vol },
@@ -496,7 +557,8 @@ function ui.main_screen(params_data, data)
       {13, 'AM1', params_data.amp_lfo1 },
       {14, 'AM2', params_data.amp_lfo2 },
       {15, 'SR', sr_types[params_data.sr] },
-      {16, 'TYPE', f_types[params_data.ftype] },
+      --{16, 'TYPE', f_types[params_data.ftype] },
+      {16, 'MODE', function(_, _, lock) ui.draw_mode(25, 59, params_data.mode, data.ui_index) end }, -- f_types[params_data.ftype] },
       {17, 'FILTER', function(lock) ui.draw_filter(45, 60, params_data, data.ui_index) end },
       {19, 'CM1', params_data.cut_lfo1 },
       {20, 'CM2', params_data.cut_lfo2 },
@@ -510,6 +572,7 @@ function ui.main_screen(params_data, data)
             lock = sr_types[params_data.default[name_lookup[v[2]]]] ~= v[3] and true or false
           elseif v[2] == 'TYPE' then
             lock = f_types[params_data.default[name_lookup[v[2]]]] ~= v[3] and true or false
+
           else
             lock = params_data.default[name_lookup[v[2]]] ~= params_data[name_lookup[v[2]]] and true or false
           end

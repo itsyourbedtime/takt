@@ -55,7 +55,7 @@ local choke = { 1, 2, 3, 4, 5, 6, 7 }
 local dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 2, [6] = 1.5, [7] = 1,} 
 
 local param_ids = {
-      ['sr'] = "quality", ['start'] = "start_frame", ['s_end'] = "end_frame", ['freq_lfo1'] = "freq_mod_lfo_1", 
+      ['sr'] = "quality", ['start'] = "start_frame", ['s_end'] = "loop_end_frame", ['l_start'] = "loop_start_frame", ['l_end'] = "end_frame", ['freq_lfo1'] = "freq_mod_lfo_1", ['mode'] = 'play_mode',
       ['freq_lfo2'] = "freq_mod_lfo_2", ['ftype'] = "filter_type", ['cutoff'] = "filter_freq", ['resonance'] = "filter_resonance", 
       ['cut_lfo1'] = "filter_freq_mod_lfo_1", ['cut_lfo2'] = "filter_freq_mod_lfo_2", ['pan'] = "pan", ['vol'] = "amp", 
       ['amp_lfo1'] = "amp_mod_lfo_1", ['amp_lfo2'] = "amp_mod_lfo_2", ['attack'] = "amp_env_attack", ['decay'] = "amp_env_decay", 
@@ -242,6 +242,14 @@ local function open_sample_settings()
     _norns.enc(2, 25 +(( data[data.pattern][data.selected[1]].params[p].sample - 1 ) * 94 ))
 end
 
+local function change_filter_type()
+      local tr = data.selected[1]
+      local p = is_lock()
+
+      data[data.pattern][tr].params[p].ftype =  data[data.pattern][tr].params[p].ftype
+      data[data.pattern][tr].params[p].ftype = (data[data.pattern][tr].params[p].ftype % 2 ) + 1
+end
+
 local function choke_group(tr, sample)
   if sample == choke[tr] then
       engine.noteOff(tr)
@@ -361,10 +369,10 @@ local function get_tr_len( tr )
 end
 
 local function place_note(tr, step, note)
-  local note_num = note
   data[data.pattern][tr][step] = 1
   data[data.pattern][tr].params[step].lock = 1
-  data[data.pattern][tr].params[step].note = note_num
+  data[data.pattern][tr].params[step].note = data[data.pattern][tr].params[step].note
+  data[data.pattern][tr].params[step].note = note
 end
 
 local function midi_event(d)
@@ -377,7 +385,6 @@ local function midi_event(d)
   -- REC TOGGLE
   if msg.cc == REC_CC and msg.val == 127 then
     PATTERN_REC = not PATTERN_REC
-    print(PATTERN_REC)
   -- Note off
   elseif msg.type == "note_off" then
     --engine.noteOff(tr)
@@ -449,7 +456,9 @@ function init()
             retrig = 0,
             mode = 3,
             start = 0,
+            l_start = 0,
             s_end = 999999,
+            l_end = 999999,
             vol = 0,
             pan = 0,
             attack = 0,
@@ -514,7 +523,7 @@ local function get_len(tr, s)
 
 local maxval = params:lookup_param("end_frame_" .. data[data.pattern][tr].params[s].sample).controlspec.maxval 
 --print(maxval)
-  if (data[data.pattern][tr].params[s].s_end ~= maxval and maxval ~= 2000000000) and data[data.pattern][tr].params[s].lock == 0 then 
+  if (data[data.pattern][tr].params[s].s_end > maxval) --[[and maxval ~= 2000000000)]] then-- and data[data.pattern][tr].params[s].lock == 0 then 
       data[data.pattern][tr].params[s].s_end = maxval
   end
 end
@@ -565,7 +574,7 @@ local step_params = {
   end,
   [1] = function(tr, s, d) -- sample
       data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 1, 100)
-      --get_len(tr, s)
+      get_len(tr, s)
   end, 
   [2] = function(tr, s, d) -- note
       data[data.pattern][tr].params[s].note = util.clamp(data[data.pattern][tr].params[s].note + d, 25, 127)
@@ -575,15 +584,16 @@ local step_params = {
       local sample = data[data.pattern][tr].params[s].sample
       local start = params:get("start_frame_" .. sample)
       local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval 
-      data[data.pattern][tr].params[s].start = util.clamp(data[data.pattern][tr].params[s].start + ((d) * 1000), 0,  length)
+      data[data.pattern][tr].params[s].start = util.clamp(data[data.pattern][tr].params[s].start + ((d) * (length / 1000)), 0,  length)
+      data[data.pattern][tr].params[s].l_start = data[data.pattern][tr].params[s].start
   end,
   [4] = function(tr, s, d) -- len
       local sample = data[data.pattern][tr].params[s].sample
       local start = params:get("start_frame_" .. sample)
+      local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval
       
-      local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval 
-      data[data.pattern][tr].params[s].s_end = util.clamp(data[data.pattern][tr].params[s].s_end + ((d) * 1000), 0, length)
-
+      data[data.pattern][tr].params[s].s_end = util.clamp(data[data.pattern][tr].params[s].s_end + ((d) * (length / 1000)), 0, length)
+      data[data.pattern][tr].params[s].l_end = data[data.pattern][tr].params[s].s_end
    end,
   [5] = function(tr, s, d) -- freq mod lfo 1 freq_lfo1
         data[data.pattern][tr].params[s].freq_lfo1 = util.clamp(data[data.pattern][tr].params[s].freq_lfo1 + d / 100, 0, 1)
@@ -621,8 +631,8 @@ local step_params = {
   [15] = function(tr, s, d) -- sample rate
       data[data.pattern][tr].params[s].sr = util.clamp(data[data.pattern][tr].params[s].sr + d, 1, 5)
   end,
-  [16] = function(tr, s, d) -- filter type
-      data[data.pattern][tr].params[s].ftype = util.clamp(data[data.pattern][tr].params[s].ftype + d, 1, 2)
+  [16] = function(tr, s, d) -- mode
+      data[data.pattern][tr].params[s].mode = util.clamp(data[data.pattern][tr].params[s].mode + d, 1, 4)
   end,
   [17] = function(tr, s, d) -- sample
       data[data.pattern][tr].params[s].cutoff = util.clamp(data[data.pattern][tr].params[s].cutoff + (d * 100), 0, 20000)
@@ -729,8 +739,12 @@ function key(n,z)
         data.sampling.start = 0
       end
     else
-      if data.ui_index == 1 then
+      if data.ui_index == 1 and z == 1 then
         open_sample_settings()
+      elseif (data.ui_index == 17 or data.ui_index == 18) and z == 1 then
+        change_filter_type()
+        
+        
       end
     end
   end
@@ -755,7 +769,8 @@ function redraw()
   if view.sampling then 
     ui.sampling(params_data, data, engines.get_pos(), engines.get_len(), engines.get_state()) 
   else
-    ui.main_screen(params_data, data)
+    local meta = engines.get_meta(params_data.sample)
+    ui.main_screen(params_data, data, meta)
   end
 
   screen.update()
@@ -895,7 +910,6 @@ function g.key(x, y, z)
               copy_pattern(ptn_copy, x)
             end
             
-            
         else
           
           if hold[y] == 1 then
@@ -991,7 +1005,7 @@ function g.redraw()
     if (not view.patterns and not view.notes_input) and sequencer_metro.is_running and not SHIFT then
       local pos = math.ceil(data[data.pattern].track.pos[y] / 16)
       local level = have_substeps(y, pos) and 15 or 6
-      if not data[data.pattern].track.mute[y] then g:led(pos, y, level ) end
+      if not data[data.pattern].track.mute[y] then g:led(pos, y, level) end
     end
   end
   

@@ -617,6 +617,7 @@ local function format_ratio_to_one(param)
   return util.round(param:get(), 0.01) .. ":1"
 end
 
+
 local function format_hide_for_stream(sample_id, param_name, formatter)
   return function(param)
     if Timber.samples_meta[sample_id].streaming == 1 then
@@ -896,6 +897,10 @@ function Timber.add_sample_params(id, include_beat_params, extra_params)
   end}
   
   Timber.num_sample_params = Timber.num_sample_params + 1
+end
+
+function Timber.get_meta(id)
+  return Timber.samples_meta[id]
 end
 
 return Timber

@@ -292,5 +292,8 @@ function engines.save_and_load(slot)
   
 end
 
+function engines.get_meta(id)
+  return Timber.get_meta(id)
+end
 
 return engines
