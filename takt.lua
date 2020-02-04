@@ -783,7 +783,7 @@ function redraw()
 
   screen.clear()
   
-  ui.head(params_data, data, view, K1_hold, rule, PATTERN_REC)
+  ui.head(redraw_params[1], data, view, K1_hold, rule, PATTERN_REC)
   
   if view.sampling then 
     local pos = engines.get_pos()
