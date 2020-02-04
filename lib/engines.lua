@@ -3,13 +3,25 @@
 -- @its_your_bedtime
 --
 
-local engines = {}
+local engines = {
+  
+        sc = {
+              play = false,
+              rec = false,
+              pos = 0,
+              start = 0,
+              length = 0,
+              mode = 0, 
+        },
+}
+
+
 local NUM_SAMPLES = 100 
 local playing = false
 local recording = false
 local position = 0
 local start = 0
-local length = 60
+local length = 15
 local mode = 1
 
 function unrequire(name)
@@ -69,18 +81,18 @@ end
 engines.phase = function(t, x)
     position = x 
     
-    if position >= length then
-      position = start
+    --if position >= length then
+      --position = start
       
-      for i = 1, 2 do 
-        softcut.position(i, start)
-        softcut.play(i, 0)
-        softcut.rec(i, 0)
+      --for i = 1, 2 do 
+        --softcut.position(i, start)
+        --softcut.play(i, 0)
+        --softcut.rec(i, 0)
         
-      end
-      playing = false
-      recording = false
-    end
+      --end
+      --playing = false
+      --recording = false
+    --end
 end
 
 
@@ -217,12 +229,13 @@ end
 function engines.play(state)
   for i = 1, 2 do
     if state then
-       playing = true
+        playing = true
         softcut.poll_start_phase()
         position = start 
         softcut.position(i, start)
         softcut.play(i, 1)
     else
+        position = 0
         playing = false
         softcut.poll_stop_phase()
         softcut.play(i, 0)
@@ -243,17 +256,17 @@ end
 function engines.set_length(x)
   length = x
   for i = 1, 2 do
-    if position > x then 
+    if position > length then 
         softcut.position(i, start)
     end
-    softcut.loop_end(i, x)
+    softcut.loop_end(i, length)
   end
 end
 
 
 function engines.clear()
   start = 0
-  length = 60
+  length = 15
   position = 0
   softcut.buffer_clear()
   for i = 1, 2 do
@@ -269,7 +282,7 @@ function engines.save_and_load(slot)
   if not util.file_exists(PATH) then util.make_dir(PATH) end
   local name = 'sample_' ..  #util.scandir(PATH)
   --local name = os.date('%m%d%H%M') ..'_'.. slot 
-  
+  print('saving', start, length)
   if mode == 1 or mode == 2 then
     softcut.buffer_write_stereo (PATH .. name, start, length)
   elseif mode == 3 then
@@ -283,6 +296,7 @@ function engines.save_and_load(slot)
     local ch, len = audio.file_info(PATH .. name)
     saved = util.round(len / 48000, 0.1) >= util.round(length, 0.1) and true or false
   until saved
+  print('loadeedd')
   Timber.load_sample(slot, PATH .. name)
   
 end

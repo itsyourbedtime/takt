@@ -522,9 +522,9 @@ end
 local sampling_params = {
   [-1] = function(d) data.sampling.mode = util.clamp(data.sampling.mode + d, 1, 4) engines.set_mode(data.sampling.mode) end,
   [0] = function(d) data.sampling.source = util.clamp(data.sampling.source + d, 1, 2) engines.set_source(data.sampling.source) end,
-  [3] = function(d) data.sampling.slot = util.clamp(data.sampling.slot + d, 1, 100) end,
-  [4] = function(d) data.sampling.start = util.clamp(data.sampling.start + d / 10, 0, 60) engines.set_start(data.sampling.start) end,
-  [5] = function(d) data.sampling.length = util.clamp(data.sampling.length + d / 10, 0.1, 60) engines.set_length(data.sampling.length) end,
+  [5] = function(d) data.sampling.slot = util.clamp(data.sampling.slot + d, 1, 100) end,
+  [3] = function(d) data.sampling.start = util.clamp(data.sampling.start + d / 10, 0, 15) engines.set_start(data.sampling.start) end,
+  [4] = function(d) data.sampling.length = util.clamp(data.sampling.length + d / 10, 0.1, 15) engines.set_length(data.sampling.length) end,
   [6] = function(d) end, --play
   [1] = function(d) end, --save
   [2] = function(d) end, --clear
@@ -736,12 +736,15 @@ function key(n,z)
       if data.ui_index == 1 and z == 1  then
         data.sampling.rec = not data.sampling.rec
         if data.sampling.rec then data.sampling.start = 0 end
-        engines.rec(data.sampling.rec)
-      
-      elseif data.ui_index == 2 or data.ui_index == 4 or data.ui_index == 5 then
+          
+          engines.rec(data.sampling.rec)
+          if not data.sampling.rec then
+            data.sampling.length = engines.get_len()
+          end
+      elseif data.ui_index == 2 or data.ui_index == 3 or data.ui_index == 4 then
         data.sampling.play = not data.sampling.play
         engines.play(z == 1 and true or false)
-      elseif data.ui_index == 3 and z == 1  then
+      elseif data.ui_index == 5 and z == 1  then
         data.sampling.play = false
         data.sampling.rec = false
         engines.play(false)

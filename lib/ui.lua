@@ -696,29 +696,31 @@ function ui.sampling(sampling, ui_index, in_l, in_r, pos, len, active)
   screen.line_width(1)
 
 
-  set_brightness(3, ui_index)
-  screen.rect( tile_x(2) , 26,  20, 17)
+  set_brightness(5, ui_index)
+  screen.rect( tile_x(0) , 44,  20, 17)
   screen.fill()
   screen.level(0) 
   
-  screen.rect( tile_x(2) + 5, 26 + 3, 12, 12)
+  screen.rect( tile_x(0) + 5, 44 + 3, 12, 12)
   screen.stroke()
-  set_brightness(3, ui_index)
   
-  screen.rect( tile_x(2) + 16, 26 + 2,1,1)
+  
+  set_brightness(5, ui_index)
+  
+  screen.rect( tile_x(0) + 16, 44 + 2,1,1)
   screen.fill()
 
   screen.level(0)  
-  screen.rect( tile_x(2) + 7, 26 + 3,8,4)
+  screen.rect( tile_x(0) + 7, 44 + 3,8,4)
   screen.stroke()
   
-  screen.rect( tile_x(2) + 11, 26 + 3,2,2)
+  screen.rect( tile_x(0) + 11, 44 + 3,2,2)
   screen.fill()
   
-  screen.move( tile_x(2) + 10, 26 + 13)
+  screen.move( tile_x(0) + 10, 44 + 13)
   screen.text_center(sampling.slot)
   
-  set_brightness(4, ui_index)
+--[[  set_brightness(4, ui_index)
   screen.rect( tile_x(0) , 44,  20, 17)
   screen.fill()
   screen.level(0) --- disp lock
@@ -735,42 +737,45 @@ function ui.sampling(sampling, ui_index, in_l, in_r, pos, len, active)
   screen.text_center('END')
   screen.move( tile_x(1) + 10, 44 + 15)
   screen.text_center(util.round(len, 0.1))
+]]
 
   set_brightness(6, ui_index)
-  screen.rect( tile_x(2) , 44,  20, 17)
+  screen.rect( tile_x(1) , 44,  20, 17)
   screen.fill()
   screen.level(0)
   
-  screen.move( tile_x(2) + 10, 44 + 15)
-  screen.rect(tile_x(2) + 7, 44 + 7, 8, 8)
-  screen.rect(tile_x(2) + 6, 44 + 5, 10, 2)
+  screen.move( tile_x(1) + 10, 44 + 15)
+  screen.rect(tile_x(1) + 7, 44 + 7, 8, 8)
+  screen.rect(tile_x(1) + 6, 44 + 5, 10, 2)
   
   screen.stroke()
 
-  screen.rect(tile_x(2) + 9, 44 + 3, 1, 1)
-  screen.rect(tile_x(2) + 10, 44 + 2, 1, 1)
-  screen.rect(tile_x(2) + 11, 44 + 3, 1, 1)
+  screen.rect(tile_x(1) + 9, 44 + 3, 1, 1)
+  screen.rect(tile_x(1) + 10, 44 + 2, 1, 1)
+  screen.rect(tile_x(1) + 11, 44 + 3, 1, 1)
   
   
-  screen.rect(tile_x(2) + 8, 44 + 8, 1, 5)
-  screen.rect(tile_x(2) + 10, 44 + 8, 1, 5)
-  screen.rect(tile_x(2) + 12, 44 + 8, 1, 5)
-  
-  screen.fill()
-  
-  set_brightness(6, ui_index)
-  screen.rect(tile_x(2) + 6, 44 + 14, 1, 1)
-  screen.rect(tile_x(2) + 14, 44 + 14, 1, 1)
-  screen.rect(tile_x(2) + 5, 44 + 4, 1, 1)
-  screen.rect(tile_x(2) + 15, 44 + 4, 1, 1)
+  screen.rect(tile_x(1) + 8, 44 + 8, 1, 5)
+  screen.rect(tile_x(1) + 10, 44 + 8, 1, 5)
+  screen.rect(tile_x(1) + 12, 44 + 8, 1, 5)
   
   screen.fill()
+  
+--[[  set_brightness(4, ui_index)
+  screen.rect(tile_x(1) + 6, 44 + 14, 1, 1)
+  screen.rect(tile_x(1) + 14, 44 + 14, 1, 1)
+  screen.rect(tile_x(1) + 5, 44 + 4, 1, 1)
+  screen.rect(tile_x(1) + 15, 44 + 4, 1, 1)
+  
+  
+]]
+screen.fill()
 
   screen.level(2)
   screen.rect(1 , 8,  83, 17)
   
   screen.fill()
-  screen.rect(65, 27, 61 , 34 )
+  screen.rect(44, 27, 82 , 34 )
   screen.stroke()
   screen.level(0)
   screen.move(3, 15)
@@ -789,13 +794,16 @@ function ui.sampling(sampling, ui_index, in_l, in_r, pos, len, active)
 ]]  
 
   if active and sampling.rec then
-    ui.waveform[pos] = { in_l, in_r}
+    local p = math.ceil(pos * 5)
+    ui.waveform[p] = { in_l, in_r} 
   end
+  
+  
   screen.level(1)
   for k,v in pairs(ui.waveform) do
-    screen.move(65 + k, 44)
-    screen.line(65 + k, 44 - (ui.waveform[k][1]) / 5)
-    screen.line(65 + k, 44 + (ui.waveform[k][1]) / 5)
+    screen.move(45 + k, 44)
+    screen.line(45 + k, 44 - (ui.waveform[k][1]) / 5.3)
+    screen.line(45 + k, 44 + (ui.waveform[k][1]) / 5.3)
     screen.stroke()
   end
     
@@ -805,12 +813,25 @@ function ui.sampling(sampling, ui_index, in_l, in_r, pos, len, active)
   --screen.level(5)
   --screen.rect(65 , 58, 1+ util.clamp(pos, 0, 59), 2)
   --screen.fill()
-  screen.level(0)
-  screen.rect(65 , 58, util.clamp(sampling.start, 0, 59), 2)
+  if sampling.play then
+    screen.level(2)
+    screen.move(45 + pos * 5.3, 60)
+    screen.line(45 + pos * 5.3, 27)
   
-  screen.fill()
+    screen.stroke()
+  end
+  
+  set_brightness(3, ui_index)
+  screen.move(45 + sampling.start * 5.3, 60)
+  screen.line(45 + sampling.start * 5.3, 27)
+  
+  screen.stroke()
 
+  set_brightness(4, ui_index)
+  screen.move(45 + sampling.length * 5.3, 60)
+  screen.line(45 + sampling.length * 5.3, 27)
   
+  screen.stroke()
 end
 
 
