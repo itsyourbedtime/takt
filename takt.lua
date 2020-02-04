@@ -402,10 +402,12 @@ local function midi_event(d)
     --engine.noteOff(tr)
   -- Note on
   elseif msg.type == "note_on" then
-    engine.noteOff(tr)
-    engine.noteOn(tr, music.note_num_to_freq(msg.note), msg.vel / 127, data[data.pattern][tr].params[tostring(tr)].sample)
-    if sequencer_metro.is_running and PATTERN_REC then
-      place_note(tr, pos, msg.note)
+    if not view.sampling then
+      engine.noteOff(tr)
+      engine.noteOn(tr, music.note_num_to_freq(msg.note), msg.vel / 127, data[data.pattern][tr].params[tostring(tr)].sample)
+      if sequencer_metro.is_running and PATTERN_REC then
+        place_note(tr, pos, msg.note)
+      end
     end
   end
 
@@ -520,11 +522,11 @@ function init()
 end
 
 local sampling_params = {
-  [-1] = function(d) data.sampling.mode = util.clamp(data.sampling.mode + d, 1, 4) engines.set_mode(data.sampling.mode) end,
-  [0] = function(d) data.sampling.source = util.clamp(data.sampling.source + d, 1, 2) engines.set_source(data.sampling.source) end,
-  [5] = function(d) data.sampling.slot = util.clamp(data.sampling.slot + d, 1, 100) end,
-  [3] = function(d) data.sampling.start = util.clamp(data.sampling.start + d / 10, 0, 15) engines.set_start(data.sampling.start) end,
-  [4] = function(d) data.sampling.length = util.clamp(data.sampling.length + d / 10, 0.1, 15) engines.set_length(data.sampling.length) end,
+  [-1] = function(d)engines.sc.mode = util.clamp(engines.sc.mode + d, 1, 4) engines.set_mode(engines.sc.mode) end,
+  [0] = function(d) engines.sc.source = util.clamp(engines.sc.source + d, 1, 2) engines.set_source(engines.sc.source) end,
+  [5] = function(d) engines.sc.slot = util.clamp(engines.sc.slot + d, 1, 100) end,
+  [3] = function(d) engines.sc.start = util.clamp(engines.sc.start + d / 10, 0, 15) engines.set_start(engines.sc.start) end,
+  [4] = function(d) engines.sc.length = util.clamp(engines.sc.length + d / 10, engines.sc.start, 15) end,--engines.set_length(engines.sc.length) end,
   [6] = function(d) end, --play
   [1] = function(d) end, --save
   [2] = function(d) end, --clear
@@ -683,7 +685,7 @@ function enc(n,d)
         data.ui_index = util.clamp(data.ui_index + d, -6, -1)
       end
     else
-      if not data.sampling.rec then
+      if not engines.sc.rec then
         data.ui_index = util.clamp(data.ui_index + d, -1, 6)      
       end
     end
@@ -734,27 +736,17 @@ function key(n,z)
   elseif n == 3 then
     if view.sampling then
       if data.ui_index == 1 and z == 1  then
-        data.sampling.rec = not data.sampling.rec
-        if data.sampling.rec then data.sampling.start = 0 end
-          
-          engines.rec(data.sampling.rec)
-          if not data.sampling.rec then
-            data.sampling.length = engines.get_len()
-          end
+          engines.rec()
+
       elseif data.ui_index == 2 or data.ui_index == 3 or data.ui_index == 4 then
-        data.sampling.play = not data.sampling.play
-        engines.play(z == 1 and true or false)
+          engines.play(z == 1 and true or false)
+        
       elseif data.ui_index == 5 and z == 1  then
-        data.sampling.play = false
-        data.sampling.rec = false
-        engines.play(false)
-        engines.rec(false)
-        engines.save_and_load(data.sampling.slot)
-        params:set('play_mode_' .. data.sampling.slot, 2)
+          engines.save_and_load(data.sampling.slot)
+          params:set('play_mode_' .. data.sampling.slot, 2)
       elseif data.ui_index == 6  and z == 1 then
-        engines.clear()
-        ui.waveform = {}
-        data.sampling.start = 0
+          engines.clear()
+          ui.waveform = {}
       end
     else
       if data.ui_index == 1 and z == 1 then
@@ -797,8 +789,8 @@ function redraw()
     local pos = engines.get_pos()
     local len = engines.get_len()
     local state = engines.get_state()
-    
-    ui.sampling(data.sampling, data.ui_index, data.in_l, data.in_r, pos, len, state) 
+    --print(pos)
+    ui.sampling(engines.sc, data.ui_index, data.in_l, data.in_r, pos)--, len, state) 
   else
     local meta = engines.get_meta(params_data.sample)
     ui.main_screen(redraw_params[1], data.ui_index, meta)

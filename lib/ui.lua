@@ -592,56 +592,21 @@ function ui.main_screen(params_data, ui_index, meta)
     
 end
 
-local function draw_reel(x, y, reverse)
-  local flutter = ui.tape.flutter
-  local right = ui.reel.right
-  local left = ui.reel.left
-  
-  local l = util.round(speed * 10)
-  if l < 0 then
-    l = math.abs(l) + 4
-  elseif l >= 4 then
-    l = 4
-  elseif l == 0 then
-    l = reverse and 5 or 1
-  end
-  screen.level(2)
-  screen.line_width(1.2)
-  
-  local pos = { 1, 3, 5}
-  
-  for i = 1, 3 do
-    screen.move((x + right[pos[i]].x) - 30, (y + right[pos[i]].y) - 20)
-    screen.line((x + right[pos[i] + 1].x) - 30, (y + right[pos[i] + 1].y) - 20)
-    screen.stroke()
-    
-    screen.move((x + left[pos[i]].x) +5, (y + left[pos[i]].y) - 20)
-    screen.line((x + left[pos[i] + 1].x) +5, (y + left[pos[i] + 1].y) - 20)
-    screen.stroke()
-  end
-  screen.line_width(1)
-  --
-  screen.level(2)
-  screen.circle(x + 35, y + 5, 11)
-  screen.stroke()
-  screen.circle(x + 65, y + 5, 11)
-  screen.stroke()
-  
-end
-
 
 local function tile_x(x)
   return 21 * (x) + 1 
 end
 
 
-function ui.sampling(sampling, ui_index, in_l, in_r, pos, len, active)
+function ui.sampling(sampling, ui_index, in_l, in_r, pos)--, pos, len, active)
   local modes = {'ST', 'L+R', 'L', 'R'}
   local sources = {'EXT', 'INT' } 
   local src = sources[sampling.source]
   local mode = modes[sampling.mode] 
   local rec = sampling.rec and 'ON' or 'OFF'
   local play = sampling.play and 'ON' or 'OFF'
+
+  local len = sampling.length
   
   set_brightness(-1, ui_index)
   
@@ -719,25 +684,6 @@ function ui.sampling(sampling, ui_index, in_l, in_r, pos, len, active)
   
   screen.move( tile_x(0) + 10, 44 + 13)
   screen.text_center(sampling.slot)
-  
---[[  set_brightness(4, ui_index)
-  screen.rect( tile_x(0) , 44,  20, 17)
-  screen.fill()
-  screen.level(0) --- disp lock
-  screen.move( tile_x(0)  + 10, 44 + 7)
-  screen.text_center('STRT')
-  screen.move( tile_x(0) + 10, 44 + 15)
-  screen.text_center(sampling.start)
-
-  set_brightness(5, ui_index)
-  screen.rect( tile_x(1) , 44,  20, 17)
-  screen.fill()
-  screen.level(0) --- disp lock
-  screen.move( tile_x(1)  + 10, 44 + 7)
-  screen.text_center('END')
-  screen.move( tile_x(1) + 10, 44 + 15)
-  screen.text_center(util.round(len, 0.1))
-]]
 
   set_brightness(6, ui_index)
   screen.rect( tile_x(1) , 44,  20, 17)
@@ -754,22 +700,10 @@ function ui.sampling(sampling, ui_index, in_l, in_r, pos, len, active)
   screen.rect(tile_x(1) + 10, 44 + 2, 1, 1)
   screen.rect(tile_x(1) + 11, 44 + 3, 1, 1)
   
-  
   screen.rect(tile_x(1) + 8, 44 + 8, 1, 5)
   screen.rect(tile_x(1) + 10, 44 + 8, 1, 5)
   screen.rect(tile_x(1) + 12, 44 + 8, 1, 5)
-  
   screen.fill()
-  
---[[  set_brightness(4, ui_index)
-  screen.rect(tile_x(1) + 6, 44 + 14, 1, 1)
-  screen.rect(tile_x(1) + 14, 44 + 14, 1, 1)
-  screen.rect(tile_x(1) + 5, 44 + 4, 1, 1)
-  screen.rect(tile_x(1) + 15, 44 + 4, 1, 1)
-  
-  
-]]
-screen.fill()
 
   screen.level(2)
   screen.rect(1 , 8,  83, 17)
@@ -789,11 +723,8 @@ screen.fill()
   screen.level(2)
   screen.stroke()
   
---[[  if active then update_reel() end
-  draw_reel(45, 38)
-]]  
 
-  if active and sampling.rec then
+  if sampling.rec then
     local p = math.ceil(pos * 5)
     ui.waveform[p] = { in_l, in_r} 
   end
@@ -802,22 +733,19 @@ screen.fill()
   screen.level(1)
   for k,v in pairs(ui.waveform) do
     screen.move(45 + k, 44)
-    screen.line(45 + k, 44 - (ui.waveform[k][1]) / 5.3)
-    screen.line(45 + k, 44 + (ui.waveform[k][1]) / 5.3)
+    local l = sampling.mode == 1 and 1 or sampling.mode == 4 and 2 or 1
+    local r = sampling.mode == 1 and 2 or sampling.mode == 3 and 1 or 2 
+    
+    
+    screen.line(45 + k, 44 - (ui.waveform[k][l]) / 5.3)
+    screen.line(45 + k, 44 + (ui.waveform[k][r]) / 5.3)
     screen.stroke()
   end
-    
-    
----screen.stroke()
-  
-  --screen.level(5)
-  --screen.rect(65 , 58, 1+ util.clamp(pos, 0, 59), 2)
-  --screen.fill()
+
   if sampling.play then
     screen.level(2)
     screen.move(45 + pos * 5.3, 60)
     screen.line(45 + pos * 5.3, 27)
-  
     screen.stroke()
   end
   

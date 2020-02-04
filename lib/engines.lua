@@ -10,8 +10,10 @@ local engines = {
               rec = false,
               pos = 0,
               start = 0,
-              length = 0,
-              mode = 0, 
+              length = 15,
+              mode = 1, 
+              source = 1,
+              slot = 1,
         },
 }
 
@@ -20,8 +22,6 @@ local NUM_SAMPLES = 100
 local playing = false
 local recording = false
 local position = 0
-local start = 0
-local length = 15
 local mode = 1
 
 function unrequire(name)
@@ -38,7 +38,7 @@ function engines.load_folder(file, add)
   local sample_id = 1
   if add then
     for i = NUM_SAMPLES - 1, 0, -1 do
-      print(i)
+      --print(i)
       if Timber.samples_meta[i].num_frames > 0 then
         sample_id = i + 1
         break
@@ -79,16 +79,17 @@ end
 
 
 engines.phase = function(t, x)
-    position = x 
-    
-    --if position >= length then
-      --position = start
+    engines.sc.position = x 
+    --print(x)
+    if engines.sc.position >= engines.sc.length then
+      engines.sc.position = engines.sc.start
       
-      --for i = 1, 2 do 
-        --softcut.position(i, start)
-        --softcut.play(i, 0)
-        --softcut.rec(i, 0)
-        
+      for i = 1, 2 do 
+        softcut.position(i, engines.sc.start)
+        softcut.play(i, 0)
+        softcut.rec(i, 0)
+      end
+    end
       --end
       --playing = false
       --recording = false
@@ -97,11 +98,11 @@ end
 
 
 function engines.get_pos()
-    return position
+    return engines.sc.position
 end
 
 function engines.get_len()
-    return length
+    return engines.sc.length
 end
 
 function engines.get_state()
@@ -202,45 +203,48 @@ function engines.set_source(src)
 end
 
 
-function engines.rec(state)
-  recording = state
+function engines.rec()
+  engines.sc.rec = not engines.sc.rec
   for i = 1, 2 do
-    if state then
+    if engines.sc.rec then
        engines.clear()
-       recording = true
+       --engines.sc.recording = true
        softcut.loop_start(i, 0)
        softcut.loop_end(i, 60)
        softcut.poll_start_phase()
        softcut.position(i, 0)
        softcut.rec(i, 1)
     else
-        length = position
-        recording = false
+        engines.sc.length = engines.sc.position
+        --recording = false
         softcut.poll_stop_phase()
         softcut.rec(i, 0)
-        start = 0
-        softcut.position(i, start)
+        engines.sc.start = 0
+        softcut.position(i, 0)
     end
   end
+  --print('rec', engines.sc.start,engines.sc.length)
 
 end
 
 
 function engines.play(state)
+  engines.sc.play = state
   for i = 1, 2 do
     if state then
-        playing = true
+        --playing = true
         softcut.poll_start_phase()
-        position = start 
-        softcut.position(i, start)
+        --position = start 
+        softcut.position(i, engines.sc.start)
         softcut.play(i, 1)
     else
-        position = 0
-        playing = false
+        engines.sc.position = 0
+        --playing = false
         softcut.poll_stop_phase()
         softcut.play(i, 0)
     end
   end
+  --print('play',engines.sc.start,engines.sc.length)
 end
 
 
@@ -254,23 +258,23 @@ end
 
 
 function engines.set_length(x)
-  length = x
+  engines.sc.length = x
   for i = 1, 2 do
-    if position > length then 
-        softcut.position(i, start)
+    if engines.sc.position > engines.sc.length then 
+        softcut.position(i, engines.sc.start)
     end
-    softcut.loop_end(i, length)
+    softcut.loop_end(i, engines.sc.length)
   end
 end
 
 
 function engines.clear()
-  start = 0
-  length = 15
-  position = 0
+  engines.sc.start = 0
+  engines.sc.length = 15
+  engines.sc.position = 0
   softcut.buffer_clear()
   for i = 1, 2 do
-    softcut.position(i, start)
+    softcut.position(i, 0)
   end
   
 end
@@ -281,8 +285,13 @@ function engines.save_and_load(slot)
   local PATH = _path.audio .. 'takt/'
   if not util.file_exists(PATH) then util.make_dir(PATH) end
   local name = 'sample_' ..  #util.scandir(PATH)
+  local start = engines.sc.start
+  local length = engines.sc.length
+  local mode = engines.sc.mode
   --local name = os.date('%m%d%H%M') ..'_'.. slot 
-  print('saving', start, length)
+  
+  --print('saving', start, length)
+  
   if mode == 1 or mode == 2 then
     softcut.buffer_write_stereo (PATH .. name, start, length)
   elseif mode == 3 then
@@ -296,7 +305,16 @@ function engines.save_and_load(slot)
     local ch, len = audio.file_info(PATH .. name)
     saved = util.round(len / 48000, 0.1) >= util.round(length, 0.1) and true or false
   until saved
-  print('loadeedd')
+
+  local pending = true
+  
+  while pending do
+    local ch, len = audio.file_info(PATH .. name)
+    pending = util.round(len / 48000, 0.1) >= util.round(length, 0.1) and false or true
+  break end
+
+
+
   Timber.load_sample(slot, PATH .. name)
   
 end
