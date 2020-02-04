@@ -277,20 +277,16 @@ function engines.save_and_load(slot)
   elseif mode == 4 then
     softcut:buffer_write_mono (PATH .. name, start, length, 2)
   end
-
-  local saved = false
-  while not saved do
-    local ch, len = audio.file_info(PATH .. name)
-    if util.round(len / 48000, 0.1) == util.round(length, 0.1) then 
-      saved = true 
-      break 
-    end
-  end
   
-  print('len ok - loading')
+  local saved = false
+  repeat
+    local ch, len = audio.file_info(PATH .. name)
+    saved = util.round(len / 48000, 0.1) >= util.round(length, 0.1) and true or false
+  until saved
   Timber.load_sample(slot, PATH .. name)
   
 end
+
 
 function engines.get_meta(id)
   return Timber.get_meta(id)

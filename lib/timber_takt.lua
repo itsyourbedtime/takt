@@ -513,11 +513,9 @@ local function set_marker(id, param_prefix)
   
   if param_prefix == "start_frame_" or start_frame ~= params:get("start_frame_" .. id) then
     engine.startFrame(id, params:get("start_frame_" .. id))
-
   end
   if param_prefix == "end_frame_" or end_frame ~= params:get("end_frame_" .. id) then
     engine.endFrame(id, params:get("end_frame_" .. id))
-
   end
   
   waveform_last_edited = {id = id, param = param_prefix .. id}

@@ -24,7 +24,7 @@ local ALT, SHIFT, MOD, PATTERN_REC = false, false, false, false
 local hold, holdmax, first, second = {}, {}, {}, {}
 local copy = { false, false }
 local ptn_copy = false
-
+local redraw_params = {}
 local g = grid.connect()
 
 local data = {
@@ -55,7 +55,7 @@ local choke = { 1, 2, 3, 4, 5, 6, 7 }
 local dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 2, [6] = 1.5, [7] = 1,} 
 
 local param_ids = {
-      ['sr'] = "quality", ['start'] = "start_frame", ['s_end'] = "loop_end_frame", ['l_start'] = "loop_start_frame", ['l_end'] = "end_frame", ['freq_lfo1'] = "freq_mod_lfo_1", ['mode'] = 'play_mode',
+      ['sr'] = "quality", ['start'] = "start_frame", ['s_end'] = "end_frame", ['l_start'] = "loop_start_frame", ['l_end'] = "loop_end_frame", ['freq_lfo1'] = "freq_mod_lfo_1", ['mode'] = 'play_mode',
       ['freq_lfo2'] = "freq_mod_lfo_2", ['ftype'] = "filter_type", ['cutoff'] = "filter_freq", ['resonance'] = "filter_resonance", 
       ['cut_lfo1'] = "filter_freq_mod_lfo_1", ['cut_lfo2'] = "filter_freq_mod_lfo_2", ['pan'] = "pan", ['vol'] = "amp", 
       ['amp_lfo1'] = "amp_mod_lfo_1", ['amp_lfo2'] = "amp_mod_lfo_2", ['attack'] = "amp_env_attack", ['decay'] = "amp_env_decay", 
@@ -225,6 +225,11 @@ local function get_params(tr, step, lock)
     end
 end
 
+local function tr_change(tr)
+  redraw_params[1] = get_params(tr)
+  redraw_params[2] = redraw_params[1]
+end
+
 local function is_lock()
     local src = data.selected
     if src[2] == false then
@@ -272,7 +277,9 @@ local function metaseq(counter)
     end
 end
 
+
 local function seqrun(counter)
+  --if prev == nil then prev = get_params(1) end
 
   for tr = 1, 7 do
 
@@ -299,10 +306,13 @@ local function seqrun(counter)
           local step_param = get_params(tr, pos)
           
           data[data.pattern].track.div[tr] = step_param.div ~= data[data.pattern].track.div[tr] and step_param.div or data[data.pattern].track.div[tr]
-          --if step_param.div ~= data.
 
           if rule[step_param.rule][2](tr, pos) then 
             step_param = step_param.lock ~= 1 and get_params(tr) or step_param
+            if tr == data.selected[1] then 
+              redraw_params[1] = step_param
+              redraw_params[2] = step_param
+            end
             set_locks(step_param)
             choke_group(tr, step_param.sample)
             engine.noteOn(tr, music.note_num_to_freq(step_param.note), 1, step_param.sample)
@@ -322,7 +332,9 @@ local function clear_substeps(tr, s )
   end
 end
 local function move_params(tr, src, dst )
-     data[data.pattern][tr].params[src], data[data.pattern][tr].params[dst] = data[data.pattern][tr].params[dst], data[data.pattern][tr].params[src]
+    local s = data[data.pattern][tr].params[src]
+     data[data.pattern][tr].params[dst] = s
+     --data[data.pattern][tr].params[src], data[data.pattern][tr].params[dst] = data[data.pattern][tr].params[dst], data[data.pattern][tr].params[src]
 end
 
 
@@ -457,8 +469,8 @@ function init()
             mode = 3,
             start = 0,
             l_start = 0,
-            s_end = 999999,
-            l_end = 999999,
+            s_end = 99999999,
+            l_end = 99999999,
             vol = 0,
             pan = 0,
             attack = 0,
@@ -489,7 +501,8 @@ function init()
         
       end
     end
-  
+    redraw_params[1] = data[1][1].params[tostring(1)]
+    redraw_params[2] = data[1][1].params[tostring(1)]
 
     sequencer_metro = metro.init()
     sequencer_metro.time = 60 / (data[data.pattern].bpm * 2) / 16 --[[ppqn]] / 4 
@@ -520,12 +533,9 @@ local sampling_params = {
 }
 
 local function get_len(tr, s)
-
-local maxval = params:lookup_param("end_frame_" .. data[data.pattern][tr].params[s].sample).controlspec.maxval 
---print(maxval)
-  if (data[data.pattern][tr].params[s].s_end > maxval) --[[and maxval ~= 2000000000)]] then-- and data[data.pattern][tr].params[s].lock == 0 then 
-      data[data.pattern][tr].params[s].s_end = maxval
-  end
+  local maxval = params:lookup_param("end_frame_" .. data[data.pattern][tr].params[s].sample).controlspec.maxval
+  data[data.pattern][tr].params[s].s_end = maxval
+  data[data.pattern][tr].params[s].l_end = maxval
 end
 
 local track_params = {
@@ -536,6 +546,7 @@ local track_params = {
   end,
   [-5] = function(tr, s, d) -- rnd
       data.selected[1] = util.clamp(data.selected[1] + d, 1, 7)
+      tr_change(data.selected[1])
   end,
   [-4] = function(tr, s, d) -- global bpm
       set_bpm(util.clamp(data[data.pattern].bpm + d, 1, 999))
@@ -574,7 +585,6 @@ local step_params = {
   end,
   [1] = function(tr, s, d) -- sample
       data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 1, 100)
-      get_len(tr, s)
   end, 
   [2] = function(tr, s, d) -- note
       data[data.pattern][tr].params[s].note = util.clamp(data[data.pattern][tr].params[s].note + d, 25, 127)
@@ -582,14 +592,12 @@ local step_params = {
   end,
   [3] = function(tr, s, d) -- start
       local sample = data[data.pattern][tr].params[s].sample
-      local start = params:get("start_frame_" .. sample)
       local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval 
       data[data.pattern][tr].params[s].start = util.clamp(data[data.pattern][tr].params[s].start + ((d) * (length / 1000)), 0,  length)
       data[data.pattern][tr].params[s].l_start = data[data.pattern][tr].params[s].start
   end,
   [4] = function(tr, s, d) -- len
       local sample = data[data.pattern][tr].params[s].sample
-      local start = params:get("start_frame_" .. sample)
       local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval
       
       data[data.pattern][tr].params[s].s_end = util.clamp(data[data.pattern][tr].params[s].s_end + ((d) * (length / 1000)), 0, length)
@@ -654,7 +662,8 @@ local step_params = {
 
 function enc(n,d)
   norns.encoders.set_sens(1,4)
-  norns.encoders.set_sens(2,3)
+  norns.encoders.set_sens(2,4)
+  norns.encoders.set_sens(3,4)
   norns.encoders.set_accel(1, false)
   norns.encoders.set_accel(2, false)
   norns.encoders.set_accel(3, ((data.ui_index == 3 or data.ui_index == 4) and view.steps_engine) and true or false)
@@ -664,6 +673,7 @@ function enc(n,d)
   
   if n == 1 then
         data.selected[1] = util.clamp(data.selected[1] + d, 1, 7)
+        tr_change(data.selected[1])
   elseif n == 2 then
     
     if not view.sampling then
@@ -687,6 +697,10 @@ function enc(n,d)
       if K1_hold then
         track_params[data.ui_index](tr, p, d)
       else
+        
+        redraw_params[1] = get_params(tr, is_lock())
+        redraw_params[2] = redraw_params[1] 
+        
         if type(p) == 'string' then
           step_params[data.ui_index](tr, p, d)
         else
@@ -697,7 +711,7 @@ function enc(n,d)
           end
         end
       
-      if not data.selected[2] then set_locks(get_params(tr)) end
+      if view.notes_input then set_locks(get_params(tr)) end
       end
     else
       sampling_params[data.ui_index](d)
@@ -736,6 +750,7 @@ function key(n,z)
         params:set('play_mode_' .. data.sampling.slot, 2)
       elseif data.ui_index == 6  and z == 1 then
         engines.clear()
+        ui.waveform = {}
         data.sampling.start = 0
       end
     else
@@ -750,29 +765,42 @@ function key(n,z)
   end
 end
 
+
 function redraw()
 
   local tr = data.selected[1]
   local pos = data[data.pattern].track.pos[tr]
-  local params_data = get_params(data.selected[1], sequencer_metro.is_running and pos or false, true)
-  local step_params = data[data.pattern][tr].params[pos]
   local trig = data[data.pattern][tr][pos]
+  local params_data = get_params(tr, sequencer_metro.is_running and pos or false, true)
+
   
   if data.selected[2] then
-    params_data = get_params(data.selected[1], get_step(data.selected[2]), true)
+    redraw_params[1] = get_params(data.selected[1], get_step(data.selected[2]), true)
+  elseif not data.selected[2] then
+    redraw_params[1] = redraw_params[2]
   end
   
+
+  -- length hack
+  if params_data.s_end == 99999999 and engines.get_meta(params_data.sample).waveform[2] ~= nil then
+    get_len(tr, is_lock())
+  end
+
   screen.clear()
   
   ui.head(params_data, data, view, K1_hold, rule, PATTERN_REC)
   
   if view.sampling then 
-    ui.sampling(params_data, data, engines.get_pos(), engines.get_len(), engines.get_state()) 
+    local pos = engines.get_pos()
+    local len = engines.get_len()
+    local state = engines.get_state()
+    
+    ui.sampling(data.sampling, data.ui_index, data.in_l, data.in_r, pos, len, state) 
   else
     local meta = engines.get_meta(params_data.sample)
-    ui.main_screen(params_data, data, meta)
+    ui.main_screen(redraw_params[1], data.ui_index, meta)
   end
-
+  
   screen.update()
 
 end
@@ -873,6 +901,7 @@ function g.key(x, y, z)
      
         cond = have_substeps(y, x) 
         data.selected = { y, z == 1 and x or false }
+        if not data.selected[2] then tr_change(y) end
         if not data.selected[2] and data.ui_index < 1 then data.ui_index = 1 end
 
        if z == 1 then
@@ -894,7 +923,7 @@ function g.key(x, y, z)
             clear_substeps(y, x)
             
             data.selected = { y, false }
-    
+            tr_change(y)
           end
         end        
       end
