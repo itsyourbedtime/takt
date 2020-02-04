@@ -645,7 +645,7 @@ local step_params = {
       data[data.pattern][tr].params[s].mode = util.clamp(data[data.pattern][tr].params[s].mode + d, 1, 4)
   end,
   [17] = function(tr, s, d) -- sample
-      data[data.pattern][tr].params[s].cutoff = util.clamp(data[data.pattern][tr].params[s].cutoff + (d * 100), 0, 20000)
+      data[data.pattern][tr].params[s].cutoff = util.clamp(data[data.pattern][tr].params[s].cutoff + (d * 200), 0, 20000)
   end,
   [18] = function(tr, s, d) -- sample
       data[data.pattern][tr].params[s].resonance = util.clamp(data[data.pattern][tr].params[s].resonance + d / 10, 0, 1)

@@ -284,20 +284,20 @@ function engines.save_and_load(slot)
   
   local PATH = _path.audio .. 'takt/'
   if not util.file_exists(PATH) then util.make_dir(PATH) end
-  local name = 'sample_' ..  #util.scandir(PATH)
+  local name = 'sample_' ..  #util.scandir(PATH) .. '.wav'
   local start = engines.sc.start
   local length = engines.sc.length
   local mode = engines.sc.mode
   --local name = os.date('%m%d%H%M') ..'_'.. slot 
   
   --print('saving', start, length)
-  
+  print(PATH..name)
   if mode == 1 or mode == 2 then
     softcut.buffer_write_stereo (PATH .. name, start, length)
   elseif mode == 3 then
-    softcut:buffer_write_mono (PATH .. name, start, length, 1)
+    softcut.buffer_write_mono (PATH .. name, start, length, 1)
   elseif mode == 4 then
-    softcut:buffer_write_mono (PATH .. name, start, length, 2)
+    softcut.buffer_write_mono (PATH .. name, start, length, 2)
   end
   
   local saved = false
