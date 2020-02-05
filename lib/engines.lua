@@ -4,13 +4,14 @@
 --
 
 local engines = {
-  
+        
         sc = {
               play = false,
               rec = false,
               pos = 0,
               start = 0,
-              length = 15,
+              length = 60,
+              max_length = 60,
               mode = 1, 
               source = 1,
               slot = 1,
@@ -18,20 +19,16 @@ local engines = {
 }
 
 
-local NUM_SAMPLES = 100 
-local playing = false
-local recording = false
-local position = 0
-local mode = 1
-
 function unrequire(name)
   package.loaded[name] = nil
   _G[name] = nil
 end
 
 unrequire("lib/timber_takt")
-local Timber = include("lib/timber_takt")
 engine.name = "Timber_Takt"
+local Timber = include("lib/timber_takt")
+local NUM_SAMPLES = 100 
+local wait_metro 
 
 function engines.load_folder(file, add)
   
@@ -80,7 +77,7 @@ end
 
 engines.phase = function(t, x)
     engines.sc.position = x 
-    --print(x)
+
     if engines.sc.position >= engines.sc.length then
       engines.sc.position = engines.sc.start
       
@@ -90,10 +87,6 @@ engines.phase = function(t, x)
         softcut.rec(i, 0)
       end
     end
-      --end
-      --playing = false
-      --recording = false
-    --end
 end
 
 
@@ -159,40 +152,42 @@ function engines.init()
 
   softcut.phase_quant(1, .01)
   softcut.event_phase(engines.phase)
+  
+  wait_metro = metro.init()
+  wait_metro.time = 0.01
+  wait_metro.count = -1
 
 end
 
 
-function engines.set_mode(mode)
+function engines.set_mode()
+  local mode = engines.sc.mode
   if mode == 1 then -- stereo
   -- set softcut to stereo inputs
     softcut.level_input_cut(1, 1, 1)
     softcut.level_input_cut(2, 1, 0)
     softcut.level_input_cut(1, 2, 0)
     softcut.level_input_cut(2, 2, 1)
-    mode = 1
   elseif mode == 2 then -- mono L + R
     softcut.level_input_cut(1, 1, 1)
     softcut.level_input_cut(2, 1, 1)
     softcut.level_input_cut(1, 2, 1)
     softcut.level_input_cut(2, 2, 1)
-    mode = 2
   elseif mode == 3 then -- mono - L
     softcut.level_input_cut(1, 1, 1)
     softcut.level_input_cut(2, 1, 0)
     softcut.level_input_cut(1, 2, 1)
     softcut.level_input_cut(2, 2, 0)
-    mode = 3
   elseif mode == 4 then -- mono - R
     softcut.level_input_cut(1, 1, 0)
     softcut.level_input_cut(2, 1, 1)
     softcut.level_input_cut(1, 2, 0)
     softcut.level_input_cut(2, 2, 1)
-    mode = 4
   end
 end
 
-function engines.set_source(src)
+function engines.set_source()
+  local src = engines.sc.source
   if src == 1 then -- ext
     audio.level_adc_cut(1)
     audio.level_eng_cut(0)
@@ -208,7 +203,6 @@ function engines.rec()
   for i = 1, 2 do
     if engines.sc.rec then
        engines.clear()
-       --engines.sc.recording = true
        softcut.loop_start(i, 0)
        softcut.loop_end(i, 60)
        softcut.poll_start_phase()
@@ -216,14 +210,12 @@ function engines.rec()
        softcut.rec(i, 1)
     else
         engines.sc.length = engines.sc.position
-        --recording = false
         softcut.poll_stop_phase()
         softcut.rec(i, 0)
         engines.sc.start = 0
         softcut.position(i, 0)
     end
   end
-  --print('rec', engines.sc.start,engines.sc.length)
 
 end
 
@@ -232,26 +224,22 @@ function engines.play(state)
   engines.sc.play = state
   for i = 1, 2 do
     if state then
-        --playing = true
         softcut.poll_start_phase()
-        --position = start 
         softcut.position(i, engines.sc.start)
         softcut.play(i, 1)
     else
         engines.sc.position = 0
-        --playing = false
         softcut.poll_stop_phase()
         softcut.play(i, 0)
     end
   end
-  --print('play',engines.sc.start,engines.sc.length)
 end
 
 
 function engines.set_start(x)
-  start = x
+  engines.sc.start = x
   for i = 1, 2 do
-    softcut.position(i, start)
+    softcut.position(i, x)
     softcut.loop_start(i, x)
   end
 end
@@ -270,7 +258,7 @@ end
 
 function engines.clear()
   engines.sc.start = 0
-  engines.sc.length = 15
+  engines.sc.length = engines.sc.max_length
   engines.sc.position = 0
   softcut.buffer_clear()
   for i = 1, 2 do
@@ -280,7 +268,7 @@ function engines.clear()
 end
 
 
-function engines.save_and_load(slot)
+function engines.save_and_load()
   
   local PATH = _path.audio .. 'takt/'
   if not util.file_exists(PATH) then util.make_dir(PATH) end
@@ -288,9 +276,11 @@ function engines.save_and_load(slot)
   local start = engines.sc.start
   local length = engines.sc.length
   local mode = engines.sc.mode
+  local slot = engines.sc.slot
+
   --local name = os.date('%m%d%H%M') ..'_'.. slot 
   
-  --print('saving', start, length)
+  print('saving', start, length)
   print(PATH..name)
   if mode == 1 or mode == 2 then
     softcut.buffer_write_stereo (PATH .. name, start, length)
@@ -300,23 +290,19 @@ function engines.save_and_load(slot)
     softcut.buffer_write_mono (PATH .. name, start, length, 2)
   end
   
-  local saved = false
-  repeat
+  wait_metro.event = function(stage)
     local ch, len = audio.file_info(PATH .. name)
-    saved = util.round(len / 48000, 0.1) >= util.round(length, 0.1) and true or false
-  until saved
+    local ready = util.round(len / 48000, 0.1) == util.round(length, 0.1) and true or false
 
-  local pending = true
-  
-  while pending do
-    local ch, len = audio.file_info(PATH .. name)
-    pending = util.round(len / 48000, 0.1) >= util.round(length, 0.1) and false or true
-  break end
-
-
-
-  Timber.load_sample(slot, PATH .. name)
-  
+    if ready then 
+      Timber.load_sample(slot, PATH .. name)
+      params:set('play_mode_' .. slot, 2)
+      wait_metro:stop()
+      --engines.clear()
+    end
+  end
+    
+  wait_metro:start()
 end
 
 

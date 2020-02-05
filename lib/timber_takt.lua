@@ -8,11 +8,6 @@
 
 local ControlSpec = require "controlspec"
 local Formatters = require "formatters"
-local MusicUtil = require "musicutil"
-local UI = require "ui"
-local Graph = require "graph"
-local FilterGraph = require "filtergraph"
-local EnvGraph = require "envgraph"
 
 local Timber = {}
 
@@ -635,7 +630,7 @@ end
 function Timber.add_params()
   
   params:add{type = "trigger", id = "clear_all", name = "Clear All", action = function(value)
-    Timber.clear_samples(0, #samples_meta - 1)
+    Timber.clear_samples(1, #samples_meta)
   end}
   params:add{type = "control", id = "lfo_1_freq", name = "LFO1 Freq", controlspec = specs.LFO_1_FREQ, formatter = Formatters.format_freq, action = function(value)
     engine.lfo1Freq(value)

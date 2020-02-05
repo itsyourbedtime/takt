@@ -1,55 +1,39 @@
 -- takt ui @its_your_bedtime
 
-local ui = {
-
-    reel = {
-        pos = { x = 28, y = 21 },  -- default
-        left  = { {}, {}, {}, {}, {}, {} },
-        right = { {}, {}, {}, {}, {}, {} },
-    },
-    tape = { 
-        tension = 30,
-        flutter = { on = false, amount = 60 }
-    },
-    playhead = {
-        height = 35,
-        brightness = 0,
-    },
-    waveform = {},
+local ui = { waveform = {}, in_l = 0, in_r = 0, out_l = 0, out_r = 0, vu_l, vu_r, vu_o_l, vu_o_r }
+local note_num_to_name = require ('musicutil').note_num_to_name
+local name_lookup = {
+  ['SMP'] = 'sample', ['MODE'] = 'play_mode', ['NOTE'] = 'note', ['STRT'] = 'start', ['END'] = 's_end', 
+  ['FM1'] = 'freq_lfo1', ['FM2'] = 'freq_lfo2', ['VOL'] = 'vol', ['PAN'] = 'pan', ['ENV'] = 'env', 
+  ['AM1'] = 'amp_lfo1', ['AM2'] = 'amp_lfo2', ['SR'] = 'sr', ['TYPE'] = 'ftype', ['CM1'] = 'cut_lfo1', 
+  ['CM2'] = 'cut_lfo2',
 }
 
-local speed = 0.2
-
-
-
-local function update_reel()
-  for i=1, 6 do
-    ui.reel.left[i].velocity = util.linlin(0, 1, 0.01, (speed / 1.9) / (1 / 2), 0.15)
-    ui.reel.left[i].position = (ui.reel.left[i].position - ui.reel.left[i].velocity) % (math.pi * 2)
-    ui.reel.left[i].x = 30 + ui.reel.left[i].orbit * math.cos(ui.reel.left[i].position)
-    ui.reel.left[i].y = 25 + ui.reel.left[i].orbit * math.sin(ui.reel.left[i].position)
-    ui.reel.right[i].velocity = util.linlin(0, 1, 0.01, (speed / 1.5) / (1 / 2), 0.15)
-    ui.reel.right[i].position = (ui.reel.right[i].position - ui.reel.right[i].velocity) % (math.pi * 2)
-    ui.reel.right[i].x = 95 + ui.reel.right[i].orbit * math.cos(ui.reel.right[i].position)
-    ui.reel.right[i].y = 25 + ui.reel.right[i].orbit * math.sin(ui.reel.right[i].position)
-  end
-end
-
-
 ui.init  = function()
-for i=1, 6 do
-    ui.reel.right[i].orbit = math.fmod(i,2)~=0 and 3 or 9
-    ui.reel.right[i].position = i <= 2 and 0 or i <= 4 and 2 or 4
-    ui.reel.right[i].velocity = util.linlin(0, 1, 0.01, speed, 1)
-    ui.reel.left[i].orbit = math.fmod(i,2)~=0 and 3 or 9
-    ui.reel.left[i].position = i <= 2 and 3 or i <= 4 and 5 or 7.1
-    ui.reel.left[i].velocity = util.linlin(0, 1, 0.01, speed * 3, 0.2)
+  ui.vu_l, ui.vu_r, ui.vu_o_l, ui.vu_o_r = poll.set("amp_in_l"), poll.set("amp_in_r"), poll.set("amp_out_l"), poll.set("amp_out_r")
+  ui.vu_l.time, ui.vu_r.time, ui.vu_o_l.time, ui.vu_o_r.time = 1 / 30, 1 / 30, 1 / 30, 1 / 30
+  
+  ui.vu_l.callback = function(val) ui.in_l = util.clamp(val * 180, 1, 70) end
+  ui.vu_r.callback = function(val) ui.in_r = util.clamp(val * 180, 1, 70) end
+  ui.vu_o_l.callback = function(val) ui.out_l = util.clamp(val * 180, 1, 70) end
+  ui.vu_o_r.callback = function(val) ui.out_r = util.clamp(val * 180, 1, 70) end
 end
-update_reel()
+
+function ui.start_polls()
+  ui.vu_l:start()
+  ui.vu_r:start()
+  ui.vu_o_l:start()
+  ui.vu_o_r:start()
+end
+
+function ui.stop_polls()
+  ui.vu_l:stop()
+  ui.vu_r:stop()
+  ui.vu_o_l:stop()
+  ui.vu_o_r:stop()
 end
 
 
-local music = require 'musicutil'
 
 local function get_step(x) return (x * 16) - 15 end
 
@@ -459,7 +443,7 @@ function ui.draw_note(x, y, params_data, ui_index, count, lock)
 
   screen.level(lvl)
   screen.move(x + 9, y + 15)
-  screen.text_center(oct ..  music.note_num_to_name(note_name):gsub('♯', '#'))
+  screen.text_center(oct ..  note_num_to_name(note_name):gsub('♯', '#'))
   screen.stroke()
  
 end
@@ -524,26 +508,76 @@ function ui.tile(index, name, value, ui_index, lock)
   
 end
 
-local name_lookup = {
-  ['SMP'] = 'sample',
-  ['MODE'] = 'play_mode',
-  ['NOTE'] = 'note',
-  ['STRT'] = 'start',
-  ['END'] = 's_end',
-  ['FM1'] = 'freq_lfo1',
-  ['FM2'] = 'freq_lfo2',
-  ['VOL'] = 'vol',
-  ['PAN'] = 'pan',
-  ['ENV'] = 'env',
-  ['AM1'] = 'amp_lfo1',
-  ['AM2'] = 'amp_lfo2',
-  ['SR'] = 'sr',
-  ['TYPE'] = 'ftype',
-  ['CM1'] = 'cut_lfo1',
-  ['CM2'] = 'cut_lfo2',
-}
+
+local count = 1
+
+
+function lfo(x, y, f, s, amp, update)
+    local left = x + 5
+    local top = y + 5
+
+    local lowamp = 0.5
+    local highamp = 1
+
+    screen.level(0)
+    local width = 10
+    
+    count = (count + 0.3)  + util.expexp(0.05, 20, 0.11, 0.13, f)  
+
+    local shapes = { math.sin, math.tanh, math.tan, math.sqrt, math.random }
+    local i = 2
+    for j = 1, width do
+      local amp = math.sin((count  * (i == 1 and 1 or 2) / 0.3 + j / width)  * (i == 1 and 2 or 4) * math.pi) 
+        * util.linlin(1, width / 2, lowamp, highamp, j < (width / 2) and j or width - j) - 0.75 
+        * util.linlin(1, width / 2, lowamp, highamp, j < (width / 2) and j or width - j)-(util.linexp(0, 1, 0.5, 6, j/width) * 0) 
+        or 0
+
+      screen.pixel(left - 1 + j, top + amp)
+    end
+    screen.fill()
+end
+
+
+function ui.draw_lfo(x, y, lfo_num, params_data, index,  ui_index, lock, n) 
+  set_brightness(index, ui_index)
+  screen.rect(x,  y, 20, 17)
+  screen.fill()
+
+  local value = params_data[name_lookup[n]]
+
+  if index == ui_index then
+    local shape = params:get('lfo_'.. lfo_num .. '_wave_shape')
+    local freq = params:get('lfo_'.. lfo_num ..'_freq')
+    lfo(x, y, freq, shape, value)--, true)-- index == ui_index and true)
+    
+  else
+    screen.level(0)
+    screen.move(x + 5, y + 7)
+    screen.text(n)
+    screen.stroke()
+  end
+
+
+
+
+
+  local lvl = lock == true and 15 or 0 --
+
+  screen.level(lvl)
+  screen.move(x + 9, y + 15)
+  if type(value) == 'number'and value ~= math.floor(value) and index ~= 7 then 
+    value = string.sub(value, 2)
+  end
+
+  screen.text_center(value) --oct ..  note_num_to_name(note_name):gsub('♯', '#'))
+  screen.stroke()
+
+
+end
 
 local prev_params = {}
+
+
 
 function ui.main_screen(params_data, ui_index, meta)
     local params_data = params_data or prev_params
@@ -555,18 +589,18 @@ function ui.main_screen(params_data, ui_index, meta)
       {1, 'SMP',  params_data.sample },
       {2, 'NOTE', function(_, _, lock) ui.draw_note(22, 8, params_data, ui_index, false, lock) end },
       {3, 'S-E', function(_,_, lock) ui.draw_waveform(43, 8, params_data, ui_index, meta, lock) end },
-      {5, 'FM1', params_data.freq_lfo1 },
-      {6, 'FM2', params_data.freq_lfo2 },
+      {5, 'FM1', function(i,n,lock) ui.draw_lfo(85, 8, 1, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
+      {6, 'FM2', function(i,n,lock) ui.draw_lfo(106, 8, 2, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
       {7, 'VOL', params_data.vol },
       {8, 'PAN', function(_, _, lock) ui.draw_pan(22, 26, params_data, ui_index, 8, lock) end },
       {9, 'ENV', function(lock)  ui.draw_env(45, 42, 'AMP', params_data, ui_index) end },
-      {13, 'AM1', params_data.amp_lfo1 },
-      {14, 'AM2', params_data.amp_lfo2 },
+      {13, 'AM1', function(i,n,lock) ui.draw_lfo(85, 26, 1, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
+      {14, 'AM2', function(i,n,lock) ui.draw_lfo(106, 26, 2, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
       {15, 'SR', sr_types[params_data.sr] },
       {16, 'MODE', function(_, _, lock) ui.draw_mode(25, 59, params_data.mode, ui_index) end },
       {17, 'FILTER', function(lock) ui.draw_filter(45, 60, params_data, ui_index) end },
-      {19, 'CM1', params_data.cut_lfo1 },
-      {20, 'CM2', params_data.cut_lfo2 },
+      {19, 'CM1', function(i,n,lock) ui.draw_lfo(85, 44, 1, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
+      {20, 'CM1',  function(i,n,lock) ui.draw_lfo(106, 44, 1, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
 
 }
    for k, v in pairs(tile) do
@@ -598,7 +632,7 @@ local function tile_x(x)
 end
 
 
-function ui.sampling(sampling, ui_index, in_l, in_r, pos)--, pos, len, active)
+function ui.sampling(sampling, ui_index, pos) 
   local modes = {'ST', 'L+R', 'L', 'R'}
   local sources = {'EXT', 'INT' } 
   local src = sources[sampling.source]
@@ -717,8 +751,8 @@ function ui.sampling(sampling, ui_index, in_l, in_r, pos)--, pos, len, active)
   screen.move(3, 23)
   screen.text('R')
   screen.stroke()
-  screen.rect(8, 10, in_l, 5)
-  screen.rect(8, 18, in_r, 5)
+  screen.rect(8, 10, sampling.source == 1 and ui.in_l or ui.out_l, 5)
+  screen.rect(8, 18, sampling.source == 1 and ui.in_r or ui.out_r, 5)
   screen.fill()
   screen.level(2)
   screen.stroke()
@@ -726,16 +760,17 @@ function ui.sampling(sampling, ui_index, in_l, in_r, pos)--, pos, len, active)
 
   if sampling.rec then
     local p = math.ceil(pos * 5)
-    ui.waveform[p] = { in_l, in_r} 
+    ui.waveform[p] = sampling.source == 1 and { ui.in_l, ui.in_r } or { ui.out_l, ui.out_r }
   end
   
   
   screen.level(1)
   for k,v in pairs(ui.waveform) do
     screen.move(45 + k, 44)
+    
+    
     local l = sampling.mode == 1 and 1 or sampling.mode == 4 and 2 or 1
     local r = sampling.mode == 1 and 2 or sampling.mode == 3 and 1 or 2 
-    
     
     screen.line(45 + k, 44 - (ui.waveform[k][l]) / 5.3)
     screen.line(45 + k, 44 + (ui.waveform[k][r]) / 5.3)

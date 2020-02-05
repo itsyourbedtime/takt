@@ -247,6 +247,15 @@ local function open_sample_settings()
     _norns.enc(2, 25 +(( data[data.pattern][data.selected[1]].params[p].sample - 1 ) * 94 ))
 end
 
+
+local function open_lfo_settings(i)
+    local p = is_lock()
+    norns.menu.toggle(true)
+    _norns.enc(1, 1000)
+    _norns.enc(2,-9999999)
+    _norns.enc(2, 10 + (i*4))
+end
+
 local function change_filter_type()
       local tr = data.selected[1]
       local p = is_lock()
@@ -430,13 +439,6 @@ function init()
 
 
   
-  local vu_l, vu_r = poll.set("amp_in_l"), poll.set("amp_in_r")
-  vu_l.time, vu_r.time = 1 / 30, 1 / 30
-  
-  vu_l.callback = function(val) data.in_l = util.clamp(val * 180, 1, 70) end
-  vu_r.callback = function(val) data.in_r = util.clamp(val * 180, 1, 70) end
-  vu_l:start()
-  vu_r:start()
 
     for i = 1, 7 do
       hold[i] = 0
@@ -522,11 +524,11 @@ function init()
 end
 
 local sampling_params = {
-  [-1] = function(d)engines.sc.mode = util.clamp(engines.sc.mode + d, 1, 4) engines.set_mode(engines.sc.mode) end,
-  [0] = function(d) engines.sc.source = util.clamp(engines.sc.source + d, 1, 2) engines.set_source(engines.sc.source) end,
+  [-1] = function(d)engines.sc.mode = util.clamp(engines.sc.mode + d, 1, 4) engines.set_mode() end,
+  [0] = function(d) engines.sc.source = util.clamp(engines.sc.source + d, 1, 2) engines.set_source() end,
   [5] = function(d) engines.sc.slot = util.clamp(engines.sc.slot + d, 1, 100) end,
-  [3] = function(d) engines.sc.start = util.clamp(engines.sc.start + d / 10, 0, 15) engines.set_start(engines.sc.start) end,
-  [4] = function(d) engines.sc.length = util.clamp(engines.sc.length + d / 10, engines.sc.start, 15) end,--engines.set_length(engines.sc.length) end,
+  [3] = function(d) engines.sc.start = util.clamp(engines.sc.start + d / 10, 0, engines.sc.length) engines.set_start(engines.sc.start) end,
+  [4] = function(d) engines.sc.length = util.clamp(engines.sc.length + d / 10, engines.sc.start, engines.sc.max_length) end,
   [6] = function(d) end, --play
   [1] = function(d) end, --save
   [2] = function(d) end, --clear
@@ -590,7 +592,6 @@ local step_params = {
   end, 
   [2] = function(tr, s, d) -- note
       data[data.pattern][tr].params[s].note = util.clamp(data[data.pattern][tr].params[s].note + d, 25, 127)
-      --
   end,
   [3] = function(tr, s, d) -- start
       local sample = data[data.pattern][tr].params[s].sample
@@ -601,7 +602,6 @@ local step_params = {
   [4] = function(tr, s, d) -- len
       local sample = data[data.pattern][tr].params[s].sample
       local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval
-      
       data[data.pattern][tr].params[s].s_end = util.clamp(data[data.pattern][tr].params[s].s_end + ((d) * (length / 1000)), 0, length)
       data[data.pattern][tr].params[s].l_end = data[data.pattern][tr].params[s].s_end
    end,
@@ -610,7 +610,6 @@ local step_params = {
   end,
   [6] = function(tr, s, d) -- freq mod lfo 2
         data[data.pattern][tr].params[s].freq_lfo2 = util.clamp(data[data.pattern][tr].params[s].freq_lfo2 + d / 100, 0, 1)
-
   end,
   [7] = function(tr, s, d) -- volume
         data[data.pattern][tr].params[s].vol = util.clamp(data[data.pattern][tr].params[s].vol + d / 10  , -48, 16)
@@ -632,11 +631,9 @@ local step_params = {
   end,
   [13] = function(tr, s, d) -- amp mod lfo 1
         data[data.pattern][tr].params[s].amp_lfo1 = util.clamp(data[data.pattern][tr].params[s].amp_lfo1 + d / 100, 0, 1)
-
   end,
   [14] = function(tr, s, d) -- amp mod lfo 2
         data[data.pattern][tr].params[s].amp_lfo2 = util.clamp(data[data.pattern][tr].params[s].amp_lfo2 + d / 100, 0, 1)
-
   end,
   [15] = function(tr, s, d) -- sample rate
       data[data.pattern][tr].params[s].sr = util.clamp(data[data.pattern][tr].params[s].sr + d, 1, 5)
@@ -652,11 +649,9 @@ local step_params = {
   end,
   [19] = function(tr, s, d) -- filter cutoff mod lfo 1
         data[data.pattern][tr].params[s].cut_lfo1 = util.clamp(data[data.pattern][tr].params[s].cut_lfo1 + d / 100, 0, 1)
-
   end,
   [20] = function(tr, s, d) -- filter cutoff mod lfo 2
         data[data.pattern][tr].params[s].cut_lfo2 = util.clamp(data[data.pattern][tr].params[s].cut_lfo2 + d / 100, 0, 1)
-
   end,
   
 }
@@ -737,24 +732,25 @@ function key(n,z)
     if view.sampling then
       if data.ui_index == 1 and z == 1  then
           engines.rec()
-
       elseif data.ui_index == 2 or data.ui_index == 3 or data.ui_index == 4 then
           engines.play(z == 1 and true or false)
-        
       elseif data.ui_index == 5 and z == 1  then
-          engines.save_and_load(data.sampling.slot)
-          params:set('play_mode_' .. data.sampling.slot, 2)
+          engines.save_and_load()
       elseif data.ui_index == 6  and z == 1 then
           engines.clear()
           ui.waveform = {}
       end
     else
+      local lfo_1 = {[5] = true, [13] = true, [19] = true }
+      local lfo_2 = {[6] = true, [14] = true, [20] = true }
       if data.ui_index == 1 and z == 1 then
         open_sample_settings()
       elseif (data.ui_index == 17 or data.ui_index == 18) and z == 1 then
         change_filter_type()
-        
-        
+      elseif lfo_1[data.ui_index] then
+        open_lfo_settings(1)
+      elseif lfo_2[data.ui_index] then
+        open_lfo_settings(2)
       end
     end
   end
@@ -775,7 +771,6 @@ function redraw()
     redraw_params[1] = redraw_params[2]
   end
   
-
   -- length hack
   if params_data.s_end == 99999999 and engines.get_meta(params_data.sample).waveform[2] ~= nil then
     get_len(tr, is_lock())
@@ -789,8 +784,7 @@ function redraw()
     local pos = engines.get_pos()
     local len = engines.get_len()
     local state = engines.get_state()
-    --print(pos)
-    ui.sampling(engines.sc, data.ui_index, data.in_l, data.in_r, pos)--, len, state) 
+    ui.sampling(engines.sc, data.ui_index, pos)
   else
     local meta = engines.get_meta(params_data.sample)
     ui.main_screen(redraw_params[1], data.ui_index, meta)
@@ -829,22 +823,22 @@ local controls = {
 function g.key(x, y, z)
   screen.ping()
   
-      if view.notes_input then
+  if view.notes_input then
+    
+      local note = linn.grid_key(x, y, z)
       
-        local note = linn.grid_key(x, y, z)
-        
-        if note then 
-            local current = data.selected[2] or tostring(data.selected[1])
-            engine.noteOn(data.selected[1], music.note_num_to_freq(note), 1, data[data.pattern][data.selected[1]].params[current].sample)
-        end
-        
-        if sequencer_metro.is_running and note and PATTERN_REC then 
-            local tr = data.selected[1]
-            local pos = data[data.pattern].track.pos[tr]
-            place_note(tr, pos, note)
-        end
-        
-    end    
+      if note then 
+          local current = data.selected[2] or tostring(data.selected[1])
+          engine.noteOn(data.selected[1], music.note_num_to_freq(note), 1, data[data.pattern][data.selected[1]].params[current].sample)
+      end
+      
+      if sequencer_metro.is_running and note and PATTERN_REC then 
+          local tr = data.selected[1]
+          local pos = data[data.pattern].track.pos[tr]
+          place_note(tr, pos, note)
+      end
+      
+  end    
 
   if y < 8 then
     local held
@@ -858,15 +852,12 @@ function g.key(x, y, z)
       holdmax[y] = hold[y]
     end
 
-      if view.steps_engine or view.sampling then
-      
+    if view.steps_engine or view.sampling then
       if SHIFT then
-        
         if z == 1 then
           if x == 16 then
             data[data.pattern].track.mute[y] = not data[data.pattern].track.mute[y]
             if data[data.pattern].track.mute[y] then 
-
               engine.noteOff(choke[y])
             end
           else
@@ -877,9 +868,7 @@ function g.key(x, y, z)
             end
           end
         end
-        
       elseif ALT then 
-        
           if hold[y] == 1 then
             first[y] = x
           elseif hold[y] == 2 then
@@ -893,30 +882,20 @@ function g.key(x, y, z)
           copy_step(copy, {y, x})
         end
       else 
-     
         cond = have_substeps(y, x) 
         data.selected = { y, z == 1 and x or false }
         if not data.selected[2] then tr_change(y) end
         if not data.selected[2] and data.ui_index < 1 then data.ui_index = 1 end
-
        if z == 1 then
-        
           down_time = util.time()
-
         else
-          
           hold_time = util.time() - down_time
           held = hold_time > 0.2 and true or false
           x = get_step(x)
           if not cond then
-            
             data[data.pattern][y][x] = 1
-
           elseif cond and not held then
-
-
             clear_substeps(y, x)
-            
             data.selected = { y, false }
             tr_change(y)
           end
@@ -961,6 +940,14 @@ function g.key(x, y, z)
       controls[x](z)
     end
     
+    if z == 1 then
+      if view.sampling then
+        ui.start_polls()
+      else 
+        ui.stop_polls()
+      end
+    end
+
   end
   
 end
