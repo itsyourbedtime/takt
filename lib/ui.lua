@@ -3,10 +3,10 @@
 local ui = { waveform = {}, in_l = 0, in_r = 0, out_l = 0, out_r = 0, vu_l, vu_r, vu_o_l, vu_o_r }
 local note_num_to_name = require ('musicutil').note_num_to_name
 local name_lookup = {
-  ['SMP'] = 'sample', ['MODE'] = 'play_mode', ['NOTE'] = 'note', ['STRT'] = 'start', ['END'] = 's_end', 
-  ['FM1'] = 'freq_lfo1', ['FM2'] = 'freq_lfo2', ['VOL'] = 'vol', ['PAN'] = 'pan', ['ENV'] = 'env', 
-  ['AM1'] = 'amp_lfo1', ['AM2'] = 'amp_lfo2', ['SR'] = 'sr', ['TYPE'] = 'ftype', ['CM1'] = 'cut_lfo1', 
-  ['CM2'] = 'cut_lfo2',
+  ['SMP'] = 'sample', ['MODE'] = 'play_mode', ['NOTE'] = 'note', ['STRT'] = 'start_frame', ['END'] = 'end_frame', 
+  ['FM1'] = 'freq_mod_lfo_1', ['FM2'] = 'freq_mod_lfo_2', ['VOL'] = 'amp', ['PAN'] = 'pan', ['ENV'] = 'env', 
+  ['AM1'] = 'amp_mod_lfo_1', ['AM2'] = 'amp_mod_lfo_2', ['SR'] = 'quality', ['TYPE'] = 'filter_type', ['CM1'] = 'filter_freq_mod_lfo_1', 
+  ['CM2'] = 'filter_freq_mod_lfo_2',
 }
 
 ui.init  = function()
@@ -191,10 +191,10 @@ end
 
 function ui.draw_env(x, y, t, params_data, ui_index)
     local atk, dec, sus, rel
-    atk = params_data.attack
-    dec = params_data.decay+ 0.4
-    sus = params_data.sustain
-    rel = params_data.release
+    atk = params_data.amp_env_attack
+    dec = params_data.amp_env_decay+ 0.4
+    sus = params_data.amp_env_sustain
+    rel = params_data.amp_env_release
     
 
     local sy = util.clamp(y - (sus * 10) + 2, 0, y )
@@ -231,12 +231,12 @@ function ui.draw_filter(x, y, params_data, ui_index)
     screen.stroke()
 
     local sample = params_data.sample
-    local cut = params_data.cutoff / 1200
-    local res = params_data.resonance
+    local cut = params_data.filter_freq / 1200
+    local res = params_data.filter_resonance
 
 
     screen.level(1)
-    if params_data.ftype == 1 then
+    if params_data.filter_type == 1 then
         local t = x + cut * 2
         screen.level(ui_index == 17 and 15 or 1)
         screen.move(x - 1, y - 9)
@@ -248,7 +248,7 @@ function ui.draw_filter(x, y, params_data, ui_index)
         screen.stroke()
         
 
-  elseif params_data.ftype == 2 then
+  elseif params_data.filter_type == 2 then
         cut =  17 - cut
         local t = x + cut * 2
         screen.level( ui_index == 18 and 15 or 1)
@@ -261,7 +261,6 @@ function ui.draw_filter(x, y, params_data, ui_index)
         screen.stroke()
   end
     
-
 end
 
 function ui.draw_mode(x, y, mode, index, lock)
@@ -353,8 +352,8 @@ end
 
 local function draw_start_end_markers(x, y, w, h, ui_index, params_data, meta, lock)
   local num_frames = meta.num_frames
-  local start_x = x + 0.5 + util.round((params_data.start / num_frames) * (w - 1))
-  local end_x = x + 0.5 + util.round((params_data.s_end / num_frames) * (w - 1))
+  local start_x = x + 0.5 + util.round((params_data.start_frame / num_frames) * (w - 1))
+  local end_x = x + 0.5 + util.round((params_data.end_frame / num_frames) * (w - 1))
 
   set_brightness(3, ui_index)
   screen.move(start_x, y)
@@ -591,16 +590,16 @@ function ui.main_screen(params_data, ui_index, meta)
       {3, 'S-E', function(_,_, lock) ui.draw_waveform(43, 8, params_data, ui_index, meta, lock) end },
       {5, 'FM1', function(i,n,lock) ui.draw_lfo(85, 8, 1, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
       {6, 'FM2', function(i,n,lock) ui.draw_lfo(106, 8, 2, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
-      {7, 'VOL', params_data.vol },
+      {7, 'VOL', params_data.amp },
       {8, 'PAN', function(_, _, lock) ui.draw_pan(22, 26, params_data, ui_index, 8, lock) end },
       {9, 'ENV', function(lock)  ui.draw_env(45, 42, 'AMP', params_data, ui_index) end },
       {13, 'AM1', function(i,n,lock) ui.draw_lfo(85, 26, 1, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
       {14, 'AM2', function(i,n,lock) ui.draw_lfo(106, 26, 2, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
-      {15, 'SR', sr_types[params_data.sr] },
-      {16, 'MODE', function(_, _, lock) ui.draw_mode(25, 59, params_data.mode, ui_index) end },
+      {15, 'SR', sr_types[params_data.quality] },
+      {16, 'MODE', function(_, _, lock) ui.draw_mode(25, 59, params_data.play_mode, ui_index, lock) end },
       {17, 'FILTER', function(lock) ui.draw_filter(45, 60, params_data, ui_index) end },
       {19, 'CM1', function(i,n,lock) ui.draw_lfo(85, 44, 1, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
-      {20, 'CM1',  function(i,n,lock) ui.draw_lfo(106, 44, 1, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
+      {20, 'CM2',  function(i,n,lock) ui.draw_lfo(106, 44, 1, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
 
 }
    for k, v in pairs(tile) do

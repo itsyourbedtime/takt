@@ -11,6 +11,9 @@ local beatclock = require 'beatclock'
 local music = require 'musicutil'
 local fileselect = require('fileselect')
 local textentry = require('textentry')
+local ControlSpec = require "controlspec"
+local Formatters = require "formatters"
+
 local midi_clock
 local hold_time = 0
 local down_time = 0
@@ -26,7 +29,7 @@ local copy = { false, false }
 local ptn_copy = false
 local redraw_params = {}
 local g = grid.connect()
-
+local param_ids
 local data = {
   pattern = 1,
   ui_index = 1,
@@ -47,7 +50,6 @@ local data = {
 
 }
 
-
 local view = { steps_engine = true, notes_input = false, sampling = false, patterns = false } 
 
 local choke = { 1, 2, 3, 4, 5, 6, 7 }
@@ -55,11 +57,11 @@ local choke = { 1, 2, 3, 4, 5, 6, 7 }
 local dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 2, [6] = 1.5, [7] = 1,} 
 
 local param_ids = {
-      ['sr'] = "quality", ['start'] = "start_frame", ['s_end'] = "end_frame", ['l_start'] = "loop_start_frame", ['l_end'] = "loop_end_frame", ['freq_lfo1'] = "freq_mod_lfo_1", ['mode'] = 'play_mode',
-      ['freq_lfo2'] = "freq_mod_lfo_2", ['ftype'] = "filter_type", ['cutoff'] = "filter_freq", ['resonance'] = "filter_resonance", 
-      ['cut_lfo1'] = "filter_freq_mod_lfo_1", ['cut_lfo2'] = "filter_freq_mod_lfo_2", ['pan'] = "pan", ['vol'] = "amp", 
-      ['amp_lfo1'] = "amp_mod_lfo_1", ['amp_lfo2'] = "amp_mod_lfo_2", ['attack'] = "amp_env_attack", ['decay'] = "amp_env_decay", 
-      ['sustain'] = "amp_env_sustain", ['release'] = "amp_env_release",
+      ['quality'] = "quality", ['start_frame'] = "start_frame", ['end_frame'] = "end_frame", ['loop_start_frame'] = "loop_start_frame", ['loop_end_frame'] = "loop_end_frame", ['freq_mod_lfo_1'] = "freq_mod_lfo_1", ['play_mode'] = 'play_mode',
+      ['freq_mod_lfo_2'] = "freq_mod_lfo_2", ['filter_type'] = "filter_type", ['filter_freq'] = "filter_freq", ['filter_resonance'] = "filter_resonance", 
+      ['filter_freq_mod_lfo_1'] = "filter_freq_mod_lfo_1", ['filter_freq_mod_lfo_2'] = "filter_freq_mod_lfo_2", ['pan'] = "pan", ['amp'] = "amp", 
+      ['amp_mod_lfo_1'] = "amp_mod_lfo_1", ['amp_mod_lfo_2'] = "amp_mod_lfo_2", ['amp_env_attack'] = "amp_env_attack", ['amp_env_decay'] = "amp_env_decay", 
+      ['amp_env_sustain'] = "amp_env_sustain", ['amp_env_release'] = "amp_env_release",
 }
 
 local rule = {
@@ -274,7 +276,7 @@ end
 local function set_locks(step_param)
     for k, v in pairs(step_param) do
       if param_ids[k] ~= nil then
-        params:set(param_ids[k]  .. '_' .. step_param.sample, v)
+        params:set(k  .. '_' .. step_param.sample, v)
       end
     end
 end
@@ -462,7 +464,6 @@ function init()
     }
 
       for l = 1, 7 do
-  
         data[t][l] = {}
         data[t][l].params = {}
         data[t][l].params[tostring(l)] = {
@@ -470,27 +471,27 @@ function init()
             sample = l,
             note = 60,
             retrig = 0,
-            mode = 3,
-            start = 0,
-            l_start = 0,
-            s_end = 99999999,
-            l_end = 99999999,
-            vol = 0,
+            play_mode = 3,
+            start_frame = 0,
+            loop_start_frame = 0,
+            end_frame = 99999999,
+            loop_end_frame = 99999999,
+            amp = 0,
             pan = 0,
-            attack = 0,
-            decay = 1,
-            sustain = 1,
-            release = 0,
-            ftype = 1,
-            cutoff = 20000,
-            resonance = 0,
-            sr = 5,
-            freq_lfo1 = 0,
-            freq_lfo2 = 0,
-            amp_lfo1 = 0,
-            amp_lfo2 = 0,
-            cut_lfo1 = 0,
-            cut_lfo2 = 0,
+            amp_env_attack = 0,
+            amp_env_decay = 1,
+            amp_env_sustain = 1,
+            amp_env_release = 0,
+            filter_type = 1,
+            filter_freq = 20000,
+            filter_resonance = 0,
+            quality = 5,
+            freq_mod_lfo_1 = 0,
+            freq_mod_lfo_2 = 0,
+            amp_mod_lfo_1 = 0,
+            amp_mod_lfo_2 = 0,
+            filter_freq_mod_lfo_1 = 0,
+            filter_freq_mod_lfo_2 = 0,
             lock = 0,
             rule = 0,
             retrig = 0,
@@ -570,7 +571,7 @@ local track_params = {
 
   end,  
 }
-
+ 
 local step_params = {
   [-3] = function(tr, s, d) -- 
     data[data.pattern][tr].params[s].div = util.clamp(data[data.pattern][tr].params[s].div + d, 1, 7)
@@ -596,62 +597,62 @@ local step_params = {
   [3] = function(tr, s, d) -- start
       local sample = data[data.pattern][tr].params[s].sample
       local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval 
-      data[data.pattern][tr].params[s].start = util.clamp(data[data.pattern][tr].params[s].start + ((d) * (length / 1000)), 0,  length)
-      data[data.pattern][tr].params[s].l_start = data[data.pattern][tr].params[s].start
+      data[data.pattern][tr].params[s].start_frame = util.clamp(data[data.pattern][tr].params[s].start_frame + ((d) * (length / 1000)), 0,  length)
+      data[data.pattern][tr].params[s].lool_start_frame = data[data.pattern][tr].params[s].lool_start_frame
   end,
   [4] = function(tr, s, d) -- len
       local sample = data[data.pattern][tr].params[s].sample
       local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval
-      data[data.pattern][tr].params[s].s_end = util.clamp(data[data.pattern][tr].params[s].s_end + ((d) * (length / 1000)), 0, length)
-      data[data.pattern][tr].params[s].l_end = data[data.pattern][tr].params[s].s_end
+      data[data.pattern][tr].params[s].end_frame = util.clamp(data[data.pattern][tr].params[s].end_frame + ((d) * (length / 1000)), 0, length)
+      data[data.pattern][tr].params[s].loop_end_frame = data[data.pattern][tr].params[s].loop_end_frame
    end,
   [5] = function(tr, s, d) -- freq mod lfo 1 freq_lfo1
-        data[data.pattern][tr].params[s].freq_lfo1 = util.clamp(data[data.pattern][tr].params[s].freq_lfo1 + d / 100, 0, 1)
+      data[data.pattern][tr].params[s].freq_mod_lfo_1 = util.clamp(data[data.pattern][tr].params[s].freq_mod_lfo_1 + d / 100, 0, 1)
   end,
   [6] = function(tr, s, d) -- freq mod lfo 2
-        data[data.pattern][tr].params[s].freq_lfo2 = util.clamp(data[data.pattern][tr].params[s].freq_lfo2 + d / 100, 0, 1)
+        data[data.pattern][tr].params[s].freq_mod_lfo_2 = util.clamp(data[data.pattern][tr].params[s].freq_mod_lfo_2 + d / 100, 0, 1)
   end,
   [7] = function(tr, s, d) -- volume
-        data[data.pattern][tr].params[s].vol = util.clamp(data[data.pattern][tr].params[s].vol + d / 10  , -48, 16)
+        data[data.pattern][tr].params[s].amp = util.clamp(data[data.pattern][tr].params[s].amp + d / 10  , -48, 16)
   end,
   [8] = function(tr, s, d) -- pan
         data[data.pattern][tr].params[s].pan = util.clamp(data[data.pattern][tr].params[s].pan + d / 10 , -1, 1)
   end,
   [9] = function(tr, s, d) -- atk
-    data[data.pattern][tr].params[s].attack = util.clamp(data[data.pattern][tr].params[s].attack + d / 10, 0, 5)
+    data[data.pattern][tr].params[s].amp_env_attack = util.clamp(data[data.pattern][tr].params[s].amp_env_attack + d / 10, 0, 5)
   end,
   [10] = function(tr, s, d) -- dec
-      data[data.pattern][tr].params[s].decay = util.clamp(data[data.pattern][tr].params[s].decay + d / 10, 0, 5)
+      data[data.pattern][tr].params[s].amp_env_decay = util.clamp(data[data.pattern][tr].params[s].amp_env_decay + d / 10, 0, 5)
   end,
   [11] = function(tr, s, d) -- sus
-      data[data.pattern][tr].params[s].sustain = util.clamp(data[data.pattern][tr].params[s].sustain + d / 10, 0, 1)
+      data[data.pattern][tr].params[s].amp_env_sustain = util.clamp(data[data.pattern][tr].params[s].amp_env_sustain + d / 10, 0, 1)
   end,
   [12] = function(tr, s, d) -- rel
-      data[data.pattern][tr].params[s].release = util.clamp(data[data.pattern][tr].params[s].release + d / 10, 0, 10)
+      data[data.pattern][tr].params[s].amp_env_release = util.clamp(data[data.pattern][tr].params[s].amp_env_release + d / 10, 0, 10)
   end,
   [13] = function(tr, s, d) -- amp mod lfo 1
-        data[data.pattern][tr].params[s].amp_lfo1 = util.clamp(data[data.pattern][tr].params[s].amp_lfo1 + d / 100, 0, 1)
+        data[data.pattern][tr].params[s].amp_mod_lfo_1 = util.clamp(data[data.pattern][tr].params[s].amp_mod_lfo_1 + d / 100, 0, 1)
   end,
   [14] = function(tr, s, d) -- amp mod lfo 2
-        data[data.pattern][tr].params[s].amp_lfo2 = util.clamp(data[data.pattern][tr].params[s].amp_lfo2 + d / 100, 0, 1)
+        data[data.pattern][tr].params[s].amp_mod_lfo_2 = util.clamp(data[data.pattern][tr].params[s].amp_mod_lfo_2 + d / 100, 0, 1)
   end,
   [15] = function(tr, s, d) -- sample rate
-      data[data.pattern][tr].params[s].sr = util.clamp(data[data.pattern][tr].params[s].sr + d, 1, 5)
+      data[data.pattern][tr].params[s].quality = util.clamp(data[data.pattern][tr].params[s].quality + d, 1, 5)
   end,
   [16] = function(tr, s, d) -- mode
-      data[data.pattern][tr].params[s].mode = util.clamp(data[data.pattern][tr].params[s].mode + d, 1, 4)
+      data[data.pattern][tr].params[s].play_mode = util.clamp(data[data.pattern][tr].params[s].play_mode + d, 1, 4)
   end,
   [17] = function(tr, s, d) -- sample
-      data[data.pattern][tr].params[s].cutoff = util.clamp(data[data.pattern][tr].params[s].cutoff + (d * 200), 0, 20000)
+      data[data.pattern][tr].params[s].filter_freq = util.clamp(data[data.pattern][tr].params[s].filter_freq + (d * 200), 0, 20000)
   end,
   [18] = function(tr, s, d) -- sample
-      data[data.pattern][tr].params[s].resonance = util.clamp(data[data.pattern][tr].params[s].resonance + d / 10, 0, 1)
+      data[data.pattern][tr].params[s].filter_resonance = util.clamp(data[data.pattern][tr].params[s].filter_resonance + d / 10, 0, 1)
   end,
   [19] = function(tr, s, d) -- filter cutoff mod lfo 1
-        data[data.pattern][tr].params[s].cut_lfo1 = util.clamp(data[data.pattern][tr].params[s].cut_lfo1 + d / 100, 0, 1)
+        data[data.pattern][tr].params[s].filter_freq_mod_lfo_1 = util.clamp(data[data.pattern][tr].params[s].filter_freq_mod_lfo_1 + d / 100, 0, 1)
   end,
   [20] = function(tr, s, d) -- filter cutoff mod lfo 2
-        data[data.pattern][tr].params[s].cut_lfo2 = util.clamp(data[data.pattern][tr].params[s].cut_lfo2 + d / 100, 0, 1)
+        data[data.pattern][tr].params[s].filter_freq_mod_lfo_2 = util.clamp(data[data.pattern][tr].params[s].filter_freq_mod_lfo_2 + d / 100, 0, 1)
   end,
   
 }
