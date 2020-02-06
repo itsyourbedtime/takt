@@ -55,6 +55,7 @@ local view = { steps_engine = true, notes_input = false, sampling = false, patte
 local choke = { 1, 2, 3, 4, 5, 6, 7 }
 
 local dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 2, [6] = 1.5, [7] = 1,} 
+local midi_dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 1, [6] = 0.666, [7] = 0.545,} 
 
 local param_ids = {
       ['quality'] = "quality", ['start_frame'] = "start_frame", ['end_frame'] = "end_frame", ['loop_start_frame'] = "loop_start_frame", ['loop_end_frame'] = "loop_end_frame", ['freq_mod_lfo_1'] = "freq_mod_lfo_1", ['play_mode'] = 'play_mode',
@@ -119,7 +120,7 @@ end
 local function set_bpm(n)
     data[data.pattern].bpm = n
     sequencer_metro.time = 60 / (data[data.pattern].bpm * 2)  / 16 --[[ppqn]] / 4 
-    midi_clock:bpm_change(data[data.pattern].bpm * dividers[data[data.pattern].sync_div])
+    midi_clock:bpm_change( util.round(data[data.pattern].bpm / midi_dividers[util.clamp(data[data.pattern].sync_div, 1, 7)]))
 end
 
 local function load_project(pth)
@@ -565,11 +566,9 @@ local track_params = {
       
   end,
   [-2] = function(tr, s, d) -- midi out bpm scale
-      data[data.pattern].sync_div = util.clamp(data[data.pattern].sync_div + d, 1, 7)
+      data[data.pattern].sync_div = util.clamp(data[data.pattern].sync_div + d, 0, 7)
+      if data[data.pattern].sync_div == 0 then midi_clock.send = false else midi_clock.send = true end
   end,
-  [-1] = function(tr, s, d) -- 
-
-  end,  
 }
  
 local step_params = {
@@ -664,7 +663,7 @@ function enc(n,d)
   norns.encoders.set_sens(3,4)
   norns.encoders.set_accel(1, false)
   norns.encoders.set_accel(2, false)
-  norns.encoders.set_accel(3, ((data.ui_index == 3 or data.ui_index == 4) and view.steps_engine) and true or false)
+  norns.encoders.set_accel(3, true)--((data.ui_index == 3 or data.ui_index == 4) and view.steps_engine) and true or false)
 
   local tr = data.selected[1]
   local s = data.selected[2] and data.selected[2] or tostring(data.selected[1])
@@ -678,7 +677,7 @@ function enc(n,d)
       if not K1_hold then 
         data.ui_index = util.clamp(data.ui_index + d, not data.selected[2] and 1 or -3, 20)
       else
-        data.ui_index = util.clamp(data.ui_index + d, -6, -1)
+        data.ui_index = util.clamp(data.ui_index + d, -6, -2)
       end
     else
       if not engines.sc.rec then

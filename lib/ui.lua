@@ -53,10 +53,10 @@ local function metro_icon(x, y, pos)
 
 end
 
-local dividers  = {'1/8', '1/4', '1/2', '3/4', '--', '3/2', '2x' } 
+local dividers  = {[0] = 'OFF', '1/8', '1/4', '1/2', '3/4', '--', '3/2', '2x' } 
 
 
-function ui.head(params_data, data, view, k1, rules, PATTERN_REC) -- , selected, data[data.pattern].track, data, data.ui_index)
+function ui.head(params_data, data, view, k1, rules, PATTERN_REC)
   local tr = data.selected[1]
   local s = data.selected[2]
   local pos = data[data.pattern].track.pos[tr]
@@ -169,22 +169,22 @@ function ui.head(params_data, data, view, k1, rules, PATTERN_REC) -- , selected,
     end
   else
     screen.level(data.ui_index == -2 and 5 or 2)  
-    screen.rect(85, 0, 20, 7)
+    screen.rect(85, 0, 41, 7)
     screen.fill()
     screen.level(0)
     screen.move(87,6)
-    screen.text('S')
-    screen.move(103,6)
+    screen.text('SYNC')
+    screen.move(120,6)
     screen.text_right(dividers[data[data.pattern].sync_div])
     screen.stroke()    
     
-    screen.level(data.ui_index == -1 and 5 or 2)  
-    screen.rect(106, 0, 20, 7)
-    screen.fill()
-    screen.level(0)
-    screen.move(89,6)
+    --screen.level(data.ui_index == -1 and 5 or 2)  
+    --screen.rect(106, 0, 20, 7)
+    --screen.fill()
+    --screen.level(0)
+    --screen.move(89,6)
     --screen.text_center('SETTINGS')
-    screen.stroke()
+    --screen.stroke()
 
   end
 end
@@ -495,12 +495,14 @@ function ui.tile(index, name, value, ui_index, lock)
   
   local lvl = lock == true and 15 or 0 --
   screen.level(lvl)
+  
 
-  if type(value) == 'number'and value ~= math.floor(value) and index ~= 7 then 
-    value = string.sub(value, 2)
+
+  if (type(value) == 'number'and value ~= math.floor(value)) and index ~= 7 then 
+    local value = string.sub(value, 2)
   end
 
-  if string.len(tostring(value)) > 4 then value = util.round(value, 1) end
+  if string.len(tostring(value)) > 4 then local value = util.round(value, 0.01) end
   
   screen.text_center(value)
   screen.stroke()
