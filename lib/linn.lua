@@ -66,21 +66,28 @@ end
 function linn.on_grid_key_down(x,y)
   focus.x = x
   focus.y = y
+  
+  
+  
 end
 
 function linn.on_grid_key_up(x,y)
   focus.x = 0
   focus.y = 0
+  
+  
 end
 
 
-function linn.grid_key(x,y,z)
+function linn.grid_key(x,y,z)--, tr, sample)
   if y < 8 then
     if z == 1 then
       linn.on_grid_key_down(x,y)
-      return linn.note_at(linn.id_at(x,y)).v
+      local note = linn.note_at(linn.id_at(x,y)).v
+      return note
     else
       linn.on_grid_key_up(x,y)
+      return false
     end
   end
 end

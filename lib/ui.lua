@@ -407,8 +407,8 @@ function ui.draw_waveform(x, y, params_data, ui_index, meta, lock)
     end
 end
 
-function ui.draw_note(x, y, params_data, ui_index, count, lock)
-  set_brightness(count and count or 2, ui_index)
+function ui.draw_note(x, y, params_data, index, ui_index, count, lock)
+  set_brightness(count and count or index, ui_index)
   screen.rect(x,  y, 20, 17)
   screen.fill()
 
@@ -474,7 +474,7 @@ function ui.draw_pan(x, y, params_data, ui_index, menu_index, lock)
 end
 
 
-function ui.tile(index, name, value, ui_index, lock)
+function ui.tile(index, name, value, ui_index, lock, custom)
   
   local x = index > 14 and (21 * index) - 314
           or (index == 13 or index == 14) and (21 * index) - 188
@@ -488,7 +488,8 @@ function ui.tile(index, name, value, ui_index, lock)
   set_brightness(index, ui_index)
   screen.rect(x , y,  20, 17)
   screen.fill()
-  screen.level(0) 
+
+  screen.level(custom and custom == ui_index and 15 or 0) 
   screen.move( x  + 10, y + 7)
   screen.text_center(name)
   screen.move( x  + 10,y + 15)
@@ -576,19 +577,78 @@ function ui.draw_lfo(x, y, lfo_num, params_data, index,  ui_index, lock, n)
 
 end
 
-local prev_params = {}
+local midi_name_lookup = { 
+  [1] = 'note', [2] = 'velocity', [3] = 'length', [4] = 'channel', [5] = 'device', [6] = 'program_change', 
+  [7] = 'cc_1_val', [8] = 'cc_2_val', [9] = 'cc_3_val', [10] = 'cc_3_val', [11] = 'cc_4_val', [12] = 'cc_4_val'
+  
+}
 
+function ui.midi_screen(params_data, ui_index, tracks, steps)
+
+   local tile = {
+      {1, 'NOTE', function(i, _, lock) ui.draw_note(1, 8, params_data,i, ui_index, false, lock) end },
+      {2, 'VEL',  params_data.velocity },
+      {3, 'LEN',   params_data.length},
+      {4, 'CH',   params_data.channel },
+      {5, 'DEV',  params_data.device },
+      {6, 'PGM',  params_data.program_change },
+      {7, 'CC' .. params_data.cc_1, params_data.cc_1_val },
+      {8, 'CC' .. params_data.cc_2, params_data.cc_2_val },
+      {9, 'CC' .. params_data.cc_3, params_data.cc_3_val },
+      {10,'CC' .. params_data.cc_4, params_data.cc_4_val },
+      {11,'CC' .. params_data.cc_5, params_data.cc_5_val },
+      {12,'CC' .. params_data.cc_6, params_data.cc_6_val },
+    }
+    
+    
+   for k, v in pairs(tile) do
+        
+      local lock = false
+      if params_data.default then
+         lock = (lock == false and params_data.default[midi_name_lookup[k]] ~= (k == 1 and params_data.note or v[3]) ) and true or false
+      end
+        
+      if v[3] and type(v[3]) == 'function' then
+        v[3](v[1], v[2], lock)
+      elseif v[3] then
+        if v[1]  > 3 and  v[3] < 0 then v[3] = '--' 
+        elseif  v[1] == 3 then v[3] = util.round(util.linlin(1, 256, 1, 16,v[3]),0.01)
+          end
+        ui.tile(v[1], v[2], v[3], ui_index, lock , v[1] > 6 and v[1] + 6 or false)
+      end
+    end
+   
+    screen.level(2)
+    screen.rect(2, 45, 124, 19)
+    screen.stroke()
+    
+    for i = 8, 14 do
+      local pos = tracks.pos[i]
+        screen.level(1)
+        screen.move(3 + (pos / 2.1), 32 + (i+i) - 2)
+        screen.line(3 + (pos / 2.1), 32 + (i+i) )
+        screen.stroke()
+        
+    for k,v in pairs(steps[i]) do
+        if v == 1 then
+          screen.level(5)
+          screen.pixel(2 + (k / 2.1), 32 + (i + (i - 1)) )
+          screen.fill()
+        end
+    end
+      
+  end
+  
+end
 
 
 function ui.main_screen(params_data, ui_index, meta)
-    local params_data = params_data or prev_params
-    prev_params = params_data or prev_params
     local sr_types = { '8k', '16k', '26k', '32k', '48k' }
     local f_types = { 'LPF', 'HPF' } 
   
     local tile = { 
       {1, 'SMP',  params_data.sample },
-      {2, 'NOTE', function(_, _, lock) ui.draw_note(22, 8, params_data, ui_index, false, lock) end },
+      {2, 'NOTE', function(i, _, lock) ui.draw_note(22, 8, params_data,i, ui_index, false, lock) end },
       {3, 'S-E', function(_,_, lock) ui.draw_waveform(43, 8, params_data, ui_index, meta, lock) end },
       {5, 'FM1', function(i,n,lock) ui.draw_lfo(85, 8, 1, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
       {6, 'FM2', function(i,n,lock) ui.draw_lfo(106, 8, 2, params_data, i, ui_index, lock, n) end }, --params_data.freq_lfo1 },
