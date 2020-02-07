@@ -63,43 +63,40 @@ function linn.id_at(x,y)
   return ((y-1) * 16) + x
 end
 
-function linn.on_grid_key_down(x,y)
+
+function linn.on_grid_key_down(x,y, m)
   focus.x = x
   focus.y = y
-  
-  
-  
+  if m then m:note_on(linn.note_at(linn.id_at(x,y)).v,127) end
 end
 
-function linn.on_grid_key_up(x,y)
+function linn.on_grid_key_up(x,y, m)
   focus.x = 0
   focus.y = 0
-  
-  
+  if m then m:note_off(linn.note_at(linn.id_at(x,y)).v,127) end
 end
 
 
-function linn.grid_key(x,y,z)--, tr, sample)
+function linn.grid_key(x, y, z, m)--, tr, sample)
   if y < 8 then
     if z == 1 then
-      linn.on_grid_key_down(x,y)
-      local note = linn.note_at(linn.id_at(x,y)).v
-      return note
+      linn.on_grid_key_down(x, y, m)
     else
-      linn.on_grid_key_up(x,y)
+      linn.on_grid_key_up(x, y, m)
       return false
     end
+    return linn.note_at(linn.id_at(x,y)).v
   end
 end
 
 function linn.grid_redraw(g)
-  for i=1,111 do 
+  for i=1, 111 do 
     pos = linn.pos_at(i)  
     note = linn.note_at(i)
     g:led(pos.x,pos.y, note.l)
   end
   g:led(focus.x,focus.y, 10)
-  g:led(16,1,3) --dunno fix last btn
+  g:led(16,1,3) 
 end
 
 

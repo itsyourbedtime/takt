@@ -17,7 +17,7 @@ local midi_out_devices = {}
 local REC_CC = 38
 --
 local hold_time, down_time, blink = 0, 0, 1
-local ALT, SHIFT, MOD, PATTERN_REC, K1_hold, K3_hold, ptn_copy, ptn_change = false, false, false, false, false, false, false, false
+local ALT, SHIFT, MOD, PATTERN_REC, K1_hold, K3_hold, ptn_copy, ptn_change_pending = false, false, false, false, false, false, false, false
 local redraw_params, hold, holdmax, first, second = {}, {}, {}, {}, {}
 local copy = { false, false }
 --
@@ -79,6 +79,12 @@ local rules = {
 
 --- utils, load/save
 
+local function reset_positions()
+  for i = 1, 14 do
+    data[data.pattern].track.pos[i] = 0
+  end
+end
+
 local function deepcopy(orig)
     local orig_type = type(orig)
     local copy
@@ -99,7 +105,8 @@ local function load_project(pth)
   sequencer_metro:stop() 
   midi_clock:stop()
   engine.noteOffAll()
-  
+  redraw_metro:stop()
+
   if string.find(pth, '.tkt') ~= nil then
     local saved = tab.load(pth)
     if saved ~= nil then
@@ -130,11 +137,13 @@ local function load_project(pth)
       print("no data")
     end
   end
+  redraw_metro:start()
 end
 
 local function save_project(txt)
   sequencer_metro:stop() 
   midi_clock:stop()
+  redraw_metro:stop()
   engine.noteOffAll()
   if txt then
     tab.save({ txt, data }, norns.state.data .. txt ..".tkt")
@@ -142,6 +151,7 @@ local function save_project(txt)
   else
     print("save cancel")
   end
+  redraw_metro:start()
 end
 
 -- views
@@ -318,12 +328,6 @@ local function get_sample_len(tr, s)
   data[data.pattern][tr].params[s].loop_end_frame = maxval
 end
 
-local function reset_positions()
-  for i = 1, 14 do
-    data[data.pattern].track.pos[i] = 0
-  end
-  
-end
 --- copy / settings
 
 local function copy_step(src, dst)
@@ -390,16 +394,10 @@ end
 local function metaseq(counter)
     if data[data.pattern].track.pos[1] == data[data.pattern].track.len[1] - 1 then
       
-        if ptn_change then
-          
-                  data.pattern = ptn_change
---[[                  if data.metaseq.from < ptn_change then
-                      data.metaseq.from = data.metaseq.from < ptn_change and ptn_change or 
-                  end
-]]                  --data.metaseq.to = ptn_change
-                  ptn_change = false
+        if ptn_change_pending then
+          data.pattern = ptn_change_pending
+          ptn_change_pending = false
         end
-        
         
       if (data.metaseq.to and data.metaseq.from) then
         data.pattern = data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from
@@ -1062,7 +1060,7 @@ function g.key(x, y, z)
           if hold[y] == 1 then
             first[y] = x
             
-            ptn_change = x
+            ptn_change_pending = x
             data.metaseq.from = false
             data.metaseq.to = false
             ptn_copy = false
@@ -1145,7 +1143,7 @@ function g.redraw()
       else
           -- patterns
           local level =
-          x == ptn_change  and sequencer_metro.is_running and  util.clamp(blink, 5, 14)
+          x == ptn_change_pending  and sequencer_metro.is_running and  util.clamp(blink, 5, 14)
           or (data.metaseq.from and data.metaseq.to) and x == data.pattern and  util.clamp(blink, 5, 14)
           or (x >= (data.metaseq.from and data.metaseq.from or data.pattern) and x <= (data.metaseq.to and data.metaseq.to or data.pattern)) and 9 
           or data.pattern == x and 15 
