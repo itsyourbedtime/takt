@@ -526,7 +526,6 @@ function lfo(x, y, f, s, amp, update)
     
     count = (count + 0.3)  + util.expexp(0.05, 20, 0.11, 0.13, f)  
 
-    local shapes = { math.sin, math.tanh, math.tan, math.sqrt, math.random }
     local i = 2
     for j = 1, width do
       local amp = math.sin((count  * (i == 1 and 1 or 2) / 0.3 + j / width)  * (i == 1 and 2 or 4) * math.pi) 

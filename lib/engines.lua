@@ -198,32 +198,33 @@ function engines.set_source()
 end
 
 
-function engines.rec()
-  engines.sc.rec = not engines.sc.rec
-  for i = 1, 2 do
-    if engines.sc.rec then
-       engines.clear()
-       softcut.loop_start(i, 0)
-       softcut.loop_end(i, 60)
-       softcut.poll_start_phase()
-       softcut.position(i, 0)
-       softcut.rec(i, 1)
-    else
-        engines.sc.length = engines.sc.position
-        softcut.poll_stop_phase()
-        softcut.rec(i, 0)
-        engines.sc.start = 0
-        softcut.position(i, 0)
+function engines.rec(state)
+  if state ~= 1 then return false end
+    engines.sc.rec = not engines.sc.rec 
+    for i = 1, 2 do
+      if engines.sc.rec then
+         engines.clear(1)
+         softcut.loop_start(i, 0)
+         softcut.loop_end(i, 60)
+         softcut.poll_start_phase()
+         softcut.position(i, 0)
+         softcut.rec(i, 1)
+      else
+          engines.sc.length = engines.sc.position
+          softcut.poll_stop_phase()
+          softcut.rec(i, 0)
+          engines.sc.start = 0
+          softcut.position(i, 0)
+      end
     end
-  end
-
+  
 end
 
 
 function engines.play(state)
-  engines.sc.play = state
+  engines.sc.play = state == 1 and true or false
   for i = 1, 2 do
-    if state then
+    if state == 1 then
         softcut.poll_start_phase()
         softcut.position(i, engines.sc.start)
         softcut.play(i, 1)
@@ -256,7 +257,8 @@ function engines.set_length(x)
 end
 
 
-function engines.clear()
+function engines.clear(state)
+  if state ~= 1 then return false end
   engines.sc.start = 0
   engines.sc.length = engines.sc.max_length
   engines.sc.position = 0
@@ -268,41 +270,42 @@ function engines.clear()
 end
 
 
-function engines.save_and_load()
+function engines.save_and_load(state)
+  if state == 1 then 
+    local PATH = _path.audio .. 'takt/'
+    if not util.file_exists(PATH) then util.make_dir(PATH) end
+    local name = 'sample_' ..  #util.scandir(PATH) .. '.wav'
+    local start = engines.sc.start
+    local length = engines.sc.length
+    local mode = engines.sc.mode
+    local slot = engines.sc.slot
   
-  local PATH = _path.audio .. 'takt/'
-  if not util.file_exists(PATH) then util.make_dir(PATH) end
-  local name = 'sample_' ..  #util.scandir(PATH) .. '.wav'
-  local start = engines.sc.start
-  local length = engines.sc.length
-  local mode = engines.sc.mode
-  local slot = engines.sc.slot
-
-  --local name = os.date('%m%d%H%M') ..'_'.. slot 
-  
-  print('saving', start, length)
-  print(PATH..name)
-  if mode == 1 or mode == 2 then
-    softcut.buffer_write_stereo (PATH .. name, start, length)
-  elseif mode == 3 then
-    softcut.buffer_write_mono (PATH .. name, start, length, 1)
-  elseif mode == 4 then
-    softcut.buffer_write_mono (PATH .. name, start, length, 2)
-  end
-  
-  wait_metro.event = function(stage)
-    local ch, len = audio.file_info(PATH .. name)
-    local ready = util.round(len / 48000, 0.1) == util.round(length, 0.1) and true or false
-
-    if ready then 
-      Timber.load_sample(slot, PATH .. name)
-      params:set('play_mode_' .. slot, 2)
-      wait_metro:stop()
-      --engines.clear()
-    end
-  end
+    --local name = os.date('%m%d%H%M') ..'_'.. slot 
     
-  wait_metro:start()
+    print('saving', start, length)
+    print(PATH..name)
+    if mode == 1 or mode == 2 then
+      softcut.buffer_write_stereo (PATH .. name, start, length)
+    elseif mode == 3 then
+      softcut.buffer_write_mono (PATH .. name, start, length, 1)
+    elseif mode == 4 then
+      softcut.buffer_write_mono (PATH .. name, start, length, 2)
+    end
+    
+    wait_metro.event = function(stage)
+      local ch, len = audio.file_info(PATH .. name)
+      local ready = util.round(len / 48000, 0.1) == util.round(length, 0.1) and true or false
+  
+      if ready then 
+        Timber.load_sample(slot, PATH .. name)
+        params:set('play_mode_' .. slot, 2)
+        wait_metro:stop()
+        --engines.clear()
+      end
+    end
+      
+    wait_metro:start()
+  end
 end
 
 
