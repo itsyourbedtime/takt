@@ -148,17 +148,13 @@ function ui.head(params_data, data, view, k1, rules, PATTERN_REC)
     screen.text_center(params_data.retrig)
     screen.stroke()
   
-      
       for i = 1, 16 do
         local offset_y = i <= 8 and 0 or 4
         local offset_x = i <= 8 and 0 or 8
-        
-        local st = s and get_step(data.selected[2]) or data[data.pattern].track.pos[tr]
+        local st = s and get_step(data.selected[2]) or util.round(data[data.pattern].track.pos[tr], 16) + 1
+        local step = data[data.pattern][tr][st + (i - 1 )]
         
         screen.level((not view.sampling and data.ui_index == 0) and 5 or 2)
-    
-        local step = data[data.pattern][data.selected[1]][st + (i - 1 )]
-        
         if step == 1 then
           screen.rect(92 + ((i - offset_x) * 4), offset_y + 1, 2, 2) 
           screen.stroke()
@@ -168,6 +164,7 @@ function ui.head(params_data, data, view, k1, rules, PATTERN_REC)
         end
     end
   else
+    
     screen.level(data.ui_index == -2 and 5 or 2)  
     screen.rect(85, 0, 41, 7)
     screen.fill()
@@ -176,23 +173,14 @@ function ui.head(params_data, data, view, k1, rules, PATTERN_REC)
     screen.text('SYNC')
     screen.move(120,6)
     screen.text_right(dividers[data[data.pattern].sync_div])
-    screen.stroke()    
-    
-    --screen.level(data.ui_index == -1 and 5 or 2)  
-    --screen.rect(106, 0, 20, 7)
-    --screen.fill()
-    --screen.level(0)
-    --screen.move(89,6)
-    --screen.text_center('SETTINGS')
-    --screen.stroke()
-
+    screen.stroke() 
   end
 end
 
 function ui.draw_env(x, y, t, params_data, ui_index)
     local atk, dec, sus, rel
     atk = params_data.amp_env_attack
-    dec = params_data.amp_env_decay+ 0.4
+    dec = params_data.amp_env_decay
     sus = params_data.amp_env_sustain
     rel = params_data.amp_env_release
     
@@ -610,9 +598,11 @@ function ui.midi_screen(params_data, ui_index, tracks, steps)
       if v[3] and type(v[3]) == 'function' then
         v[3](v[1], v[2], lock)
       elseif v[3] then
-        if v[1]  > 3 and  v[3] < 0 then v[3] = '--' 
-        elseif  v[1] == 3 then v[3] = util.round(util.linlin(1, 256, 1, 16,v[3]),0.01)
-          end
+        if v[1]  > 3 and  v[3] < 0 then 
+          v[3] = '--' 
+        elseif  v[1] == 3 then 
+          v[3] = util.round(util.linlin(1, 256, 0.1, 16,v[3]),0.01)
+        end
         ui.tile(v[1], v[2], v[3], ui_index, lock , v[1] > 6 and v[1] + 6 or false)
       end
     end
@@ -633,7 +623,15 @@ function ui.midi_screen(params_data, ui_index, tracks, steps)
           screen.level(5)
           screen.pixel(2 + (k / 2.1), 32 + (i + (i - 1)) )
           screen.fill()
+          
+          if util.round(k,16) == util.round(pos , 16) then
+            screen.level(15)
+            screen.pixel(2 + (k / 2.1), 32 + (i + (i - 1)) )
+            screen.stroke()
+          end
         end
+        
+      
     end
       
   end

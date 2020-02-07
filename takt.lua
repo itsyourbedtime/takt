@@ -27,6 +27,8 @@ local view = { steps_engine = true, steps_midi = false, notes_input = false, sam
 local choke = { 1, 2, 3, 4, 5, 6, 7, {},{},{},{},{},{},{}, ['8rt'] = {},['9rt'] = {},['10rt'] = {},['11rt'] = {}, ['12rt'] = {}, ['13rt'] = {},['14rt'] = {} }
 local dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 2, [6] = 1.5, [7] = 1,} 
 local midi_dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 1, [6] = 0.666, [7] = 0.545,} 
+local sampling_actions = { [1] = engines.rec, [2] = engines.play, [3] = engines.play, [4] = engines.play, [5] = engines.save_and_load, [6] = engines.clear }
+local lfo_1, lfo_2 = {[5] = true, [13] = true, [19] = true }, {[6] = true, [14] = true, [20] = true }
 
 local param_ids = { 
   ['quality'] = "quality", ['start_frame'] = "start_frame", ['end_frame'] = "end_frame", ['loop_start_frame'] = "loop_start_frame", ['loop_end_frame'] = "loop_end_frame", ['freq_mod_lfo_1'] = "freq_mod_lfo_1", ['play_mode'] = 'play_mode',
@@ -36,7 +38,6 @@ local param_ids = {
   ['amp_env_sustain'] = "amp_env_sustain", ['amp_env_release'] = "amp_env_release" 
   
 }
-
 
 local rules = {
   [0] =  { 'OFF', function() return true end },
@@ -76,6 +77,401 @@ local rules = {
     return true end },
 }
 
+--- utils, load/save
+
+local function deepcopy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in next, orig, nil do
+            copy[deepcopy(orig_key)] = deepcopy(orig_value)
+        end
+        setmetatable(copy, deepcopy(getmetatable(orig)))
+    else -- number, string, boolean, etc
+        copy = orig
+    end
+    return copy
+end
+
+local function load_project(pth)
+  
+  sequencer_metro:stop() 
+  midi_clock:stop()
+  engine.noteOffAll()
+  
+  if string.find(pth, '.tkt') ~= nil then
+    local saved = tab.load(pth)
+    if saved ~= nil then
+      print("data found")
+      for k,v in pairs(saved[2]) do 
+        data[k] = v 
+      end
+      
+      for t = 1, 16 do
+        for l = 1, 7 do
+          for k = 1, 256 do
+            data[t][l].params[k] = saved[2][t][l].params[k]
+           setmetatable(data[t][l].params[k], {__index =  data[t][l].params[tostring(l)]})
+          end
+        end
+        
+        for l = 8, 14 do
+          for k = 1, 256 do
+            data[t][l].params[k] = saved[2][t][l].params[k]
+           setmetatable(data[t][l].params[k], {__index =  data[t][l].params[tostring(l)]})
+          end
+        end
+      end
+      
+      if saved[1] then params:read(norns.state.data .. saved[1] .. ".pset") end
+      reset_positions()
+    else
+      print("no data")
+    end
+  end
+end
+
+local function save_project(txt)
+  sequencer_metro:stop() 
+  midi_clock:stop()
+  engine.noteOffAll()
+  if txt then
+    tab.save({ txt, data }, norns.state.data .. txt ..".tkt")
+    params:write( norns.state.data .. txt .. ".pset")
+  else
+    print("save cancel")
+  end
+end
+
+-- views
+
+local function set_view(x)
+    data.ui_index = 1 
+    for k, v in pairs(view) do
+      view[k] = k == x and true or false
+    end
+end
+
+--- steps
+
+local function get_step(x)
+  return (x * 16) - 15
+end
+
+local function get_substep(tr, step)
+    for s = (step*16) - 15, (step*16) + 15 do
+      if data[data.pattern][tr][s] == 1 then
+        return true
+      end
+    end
+end
+
+local function get_params(tr, step, lock)
+    if not step then
+      return data[data.pattern][tr].params[tostring(tr)]
+    else
+      local res = data[data.pattern][tr].params[step] 
+      if lock then 
+        res.default = data[data.pattern][tr].params[tostring(tr)]
+      end
+      return data[data.pattern][tr].params[step] -- res
+    end
+end
+
+local function set_locks(step_param)
+    for k, v in pairs(step_param) do
+      if param_ids[k] ~= nil then
+        params:set(k  .. '_' .. step_param.sample, v)
+      end
+    end
+end
+
+local function move_params(tr, src, dst )
+  local s = data[data.pattern][tr].params[src]
+  data[data.pattern][tr].params[dst] = s
+end
+
+local function clear_substeps(tr, s )
+  for l = s, s + 15 do
+    data[data.pattern][tr][l] = 0
+    data[data.pattern][tr].params[l] = {}
+    setmetatable(data[data.pattern][tr].params[l], {__index =  data[data.pattern][tr].params[tostring(tr)]})
+  end
+end
+
+local function move_substep(tr, step, t)
+   for s = step, step + 15 do
+    data[data.pattern][tr][s] = (s == t) and 1 or 0
+    move_params(tr, step, (s == t) and s or 1) 
+   end
+end
+
+local function make_retrigs(tr, step, t)
+    local t = 16 - t 
+    local offset = data[data.pattern][tr].params[step].offset
+    local params = data[data.pattern][tr].params[step]
+    local st = step + 1
+
+    for s = st + offset, (st + 14) - offset do
+      if t == 16 then
+        data[data.pattern][tr][s] = 0
+      elseif s % t == 1 then
+        data[data.pattern][tr][s] = s - offset == st and 1 or 0
+      else
+        data[data.pattern][tr][s] = ((s + offset) % t == 0) and 1 or 0
+        data[data.pattern][tr].params[s] = params
+      end
+    end
+end
+
+local function have_substeps(tr, step)
+    local st = get_step(step) 
+    for s = st, st + 15 do
+      if data[data.pattern][tr][s] == 1 then
+        return s
+      end
+    end
+end
+
+local function place_note(tr, step, note )
+  data[data.pattern][tr][step] = 1
+  data[data.pattern][tr].params[step].lock = 1
+  data[data.pattern][tr].params[step].note = data[data.pattern][tr].params[step].note
+  data[data.pattern][tr].params[step].note = note
+end
+
+--- tracks 
+
+local function is_lock()
+    local src = data.selected
+    if src[2] == false then
+      return tostring(src[1])
+    else
+      return src[2]
+    end
+end
+
+local function tr_change(tr)
+  data.selected[1] = tr
+  redraw_params[1] = get_params(tr)
+  redraw_params[2] = redraw_params[1]
+end
+
+local function sync_tracks(tr)
+    for i=1, 14 do
+      if data[data.pattern].track.div[i] == data[data.pattern].track.div[tr] then
+        data[data.pattern].track.pos[i] = data[data.pattern].track.pos[tr]
+      end
+    end
+end
+
+local function mute_track(tr)
+  
+  data[data.pattern].track.mute[tr] = not data[data.pattern].track.mute[tr]
+  if data[data.pattern].track.mute[tr] and tr < 8 then 
+    engine.noteOff(choke[tr])
+  else
+    print('midi mute')
+  end
+
+end
+
+local function set_div(tr, div)
+  data[data.pattern].track.div[tr] = div
+  data[data.pattern][tr].params[tostring(tr)].div = div
+  sync_tracks(tr)
+end
+
+local function set_bpm(n)
+    data[data.pattern].bpm = n
+    sequencer_metro.time = 60 / (data[data.pattern].bpm * 2)  / 16 --[[ppqn]] / 4 
+    midi_clock:bpm_change( util.round(data[data.pattern].bpm / midi_dividers[util.clamp(data[data.pattern].sync_div, 1, 7)]))
+end
+
+local function set_loop(tr, start, len)
+    data[data.pattern].track.start[tr] = get_step(start)
+    data[data.pattern].track.len[tr] = get_step(len) + 15
+    sync_tracks(tr)
+end
+
+local function get_tr_start( tr )
+  return math.ceil(data[data.pattern].track.start[tr] / 16)
+end
+
+local function get_tr_len( tr )
+  return math.ceil(data[data.pattern].track.len[tr] / 16)
+end
+
+local function get_sample_len(tr, s)
+  local maxval = params:lookup_param("end_frame_" .. data[data.pattern][tr].params[s].sample).controlspec.maxval
+  data[data.pattern][tr].params[s].end_frame = maxval
+  data[data.pattern][tr].params[s].loop_end_frame = maxval
+end
+
+local function reset_positions()
+  for i = 1, 14 do
+    data[data.pattern].track.pos[i] = 0
+  end
+end
+
+
+--- copy / settings
+
+local function copy_step(src, dst)
+    for i = 0, 15 do
+      data[data.pattern][dst[1]][get_step(dst[2]) + i] = data[data.pattern][src[1]][get_step(src[2]) + i]
+        for k,v in pairs(data[data.pattern][src[1]].params[get_step(src[2]) + i]) do
+          data[data.pattern][dst[1]].params[get_step(dst[2]) + i][k]  = v
+        end
+    end
+end
+
+local function copy_pattern(src, dst)
+    data[dst] = deepcopy(data[src])
+end
+
+local function open_sample_settings()
+    local p = is_lock()
+    norns.menu.toggle(true)
+    _norns.enc(1, 1000)
+    _norns.enc(2,-9999999)
+    _norns.enc(2, 25 +(( data[data.pattern][data.selected[1]].params[p].sample - 1 ) * 94 ))
+end
+
+local function open_lfo_settings(i)
+     norns.menu.toggle(true)
+    _norns.enc(1, 1000)
+    _norns.enc(2,-9999999)
+    _norns.enc(2, 10 + (i*4))
+end
+
+local function change_filter_type()
+    local tr = data.selected[1]
+    local p = is_lock()
+    data[data.pattern][tr].params[p].ftype =  data[data.pattern][tr].params[p].ftype
+    data[data.pattern][tr].params[p].ftype = (data[data.pattern][tr].params[p].ftype % 2 ) + 1
+end
+
+local function choke_group(tr, sample)
+  if sample == choke[tr] then
+      engine.noteOff(tr)
+  end
+end
+
+
+-- seq
+
+local function metaseq(counter)
+    if data[data.pattern].track.pos[1] == data[data.pattern].track.len[1] - 1 then
+      data.pattern = data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from
+      set_bpm(data[data.pattern].bpm)
+    end
+end
+
+local function seqrun(counter)
+  for tr = 1, 14 do
+
+      local start = data[data.pattern].track.start[tr]
+      local len = data[data.pattern].track.len[tr]
+      local div = data[data.pattern].track.div[tr]
+      
+      if (div ~= 6 and counter % dividers[div] == 0) 
+      or (div == 6 and counter % dividers[div] >= 0.5) then
+
+        data[data.pattern].track.pos[tr] = util.clamp((data[data.pattern].track.pos[tr] + 1) % (len ), start, len) -- voice pos
+        data[data.pattern].track.cycle[tr] = counter % 256 == 0 and data[data.pattern].track.cycle[tr] + 1 or data[data.pattern].track.cycle[tr]  --data[data.pattern].track.cycle[tr]
+
+        local mute = data[data.pattern].track.mute[tr]
+        local pos = data[data.pattern].track.pos[tr]
+        local trig = data[data.pattern][tr][pos]
+        
+        if tr > 7 and choke[tr][6] then
+
+            if pos > choke[tr][5] + choke[tr][6] then
+              midi_out_devices[choke[tr][1]]:note_off(choke[tr][2], choke[tr][3], choke[tr][4])
+            end
+          end
+        
+        if trig == 1 and not mute then
+          
+
+          set_locks(data[data.pattern][tr].params[tostring(tr)])
+          
+          local step_param = get_params(tr, pos, true)
+          
+          data[data.pattern].track.div[tr] = step_param.div ~= data[data.pattern].track.div[tr] and step_param.div or data[data.pattern].track.div[tr]
+
+          if rules[step_param.rule][2](tr, pos) then 
+            
+            step_param = step_param.lock ~= 1 and get_params(tr) or step_param
+            
+            if tr == data.selected[1] then 
+              redraw_params[1] = step_param
+              redraw_params[2] = step_param
+            end
+            
+            if tr < 8 then
+              
+              set_locks(step_param)
+              choke_group(tr, step_param.sample)
+              engine.noteOn(tr, music.note_num_to_freq(step_param.note), 1, step_param.sample)
+              choke[tr] = step_param.sample
+              
+            else
+              
+              for i = 1, 6 do
+                local cc = step_param['cc_' .. i] 
+                local val = step_param['cc_' .. i .. '_val'] 
+               -- print(cc[1],cc[2])
+                  --print('sending cc')
+                  if val >= 0 then
+                    midi_out_devices[step_param.device]:cc(cc, val, step_param.channel)
+                  end
+                --end
+              end
+              
+              if step_param.program_change >= 0 then
+                midi_out_devices[step_param.device]:program_change(step_param.program_change, step_param.channel)
+              end
+
+              midi_out_devices[step_param.device]:note_on( step_param.note, step_param.velocity, step_param.channel )
+              choke[tr] = { step_param.device, step_param.note, step_param.velocity, step_param.channel, pos, step_param.length} 
+            end
+          end
+       end
+    end
+  end
+  
+end
+
+local function midi_event(d)
+  
+  local msg = midi.to_msg(d)
+  local tr = data.selected[1] 
+
+  local pos = data[data.pattern].track.pos[tr]
+  
+  -- REC TOGGLE
+  if msg.cc == REC_CC and msg.val == 127 then
+    PATTERN_REC = not PATTERN_REC
+  -- Note off
+  elseif msg.type == "note_off" then
+    --engine.noteOff(tr)
+  -- Note on
+  elseif msg.type == "note_on" then
+    if not view.sampling then
+      engine.noteOff(tr)
+      engine.noteOn(tr, music.note_num_to_freq(msg.note), msg.vel / 127, data[data.pattern][tr].params[tostring(tr)].sample)
+      if sequencer_metro.is_running and PATTERN_REC then
+        place_note(tr, pos, msg.note)
+      end
+    end
+  end
+
+end
+---
+
 local track_params = {
   [-6] = function(tr, s, d) -- ptn
       data.pattern = (util.clamp(data.pattern + d, 1, 16))
@@ -104,7 +500,6 @@ local track_params = {
   end,
 }
  
-
 local midi_step_params = {
 
   [1] = function(tr, s, d) -- note
@@ -176,13 +571,13 @@ local step_params = {
   [3] = function(tr, s, d) -- start
       local sample = data[data.pattern][tr].params[s].sample
       local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval 
-      data[data.pattern][tr].params[s].start_frame = util.clamp(data[data.pattern][tr].params[s].start_frame + ((d) * (length / 1000)), 0,  length)
+      data[data.pattern][tr].params[s].start_frame = util.clamp(data[data.pattern][tr].params[s].start_frame + ((d) * (length / (K3_hold and 1000 or 100))), 0,  length)
       data[data.pattern][tr].params[s].lool_start_frame = data[data.pattern][tr].params[s].lool_start_frame
   end,
   [4] = function(tr, s, d) -- len
       local sample = data[data.pattern][tr].params[s].sample
       local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval
-      data[data.pattern][tr].params[s].end_frame = util.clamp(data[data.pattern][tr].params[s].end_frame + ((d) * (length / 1000)), 0, length)
+      data[data.pattern][tr].params[s].end_frame = util.clamp(data[data.pattern][tr].params[s].end_frame + ((d) * (length / (K3_hold and 1000 or 100))), 0, length)
       data[data.pattern][tr].params[s].loop_end_frame = data[data.pattern][tr].params[s].loop_end_frame
    end,
   [5] = function(tr, s, d) -- freq mod lfo 1 freq_lfo1
@@ -198,10 +593,10 @@ local step_params = {
         data[data.pattern][tr].params[s].pan = util.clamp(data[data.pattern][tr].params[s].pan + d / 10 , -1, 1)
   end,
   [9] = function(tr, s, d) -- atk
-    data[data.pattern][tr].params[s].amp_env_attack = util.clamp(data[data.pattern][tr].params[s].amp_env_attack + d / 10, 0, 5)
+    data[data.pattern][tr].params[s].amp_env_attack = util.clamp(data[data.pattern][tr].params[s].amp_env_attack + d / 50, 0, 5)
   end,
   [10] = function(tr, s, d) -- dec
-      data[data.pattern][tr].params[s].amp_env_decay = util.clamp(data[data.pattern][tr].params[s].amp_env_decay + d / 10, 0, 5)
+      data[data.pattern][tr].params[s].amp_env_decay = util.clamp(data[data.pattern][tr].params[s].amp_env_decay + d / 50, 0.01, 5)
   end,
   [11] = function(tr, s, d) -- sus
       data[data.pattern][tr].params[s].amp_env_sustain = util.clamp(data[data.pattern][tr].params[s].amp_env_sustain + d / 10, 0, 1)
@@ -247,367 +642,6 @@ local sampling_params = {
   [2] = function(d) end, --clear
   [7] = function(d) end, --clear
 }
-local function deepcopy(orig)
-    local orig_type = type(orig)
-    local copy
-    if orig_type == 'table' then
-        copy = {}
-        for orig_key, orig_value in next, orig, nil do
-            copy[deepcopy(orig_key)] = deepcopy(orig_value)
-        end
-        setmetatable(copy, deepcopy(getmetatable(orig)))
-    else -- number, string, boolean, etc
-        copy = orig
-    end
-    return copy
-end
-
-local function reset_positions()
-  for i = 1, 14 do
-    data[data.pattern].track.pos[i] = 0
-  end
-end
-
-local function set_bpm(n)
-    data[data.pattern].bpm = n
-    sequencer_metro.time = 60 / (data[data.pattern].bpm * 2)  / 16 --[[ppqn]] / 4 
-    midi_clock:bpm_change( util.round(data[data.pattern].bpm / midi_dividers[util.clamp(data[data.pattern].sync_div, 1, 7)]))
-end
-
-local function load_project(pth)
-  
-  sequencer_metro:stop() 
-  midi_clock:stop()
-  engine.noteOffAll()
-  
-  if string.find(pth, '.tkt') ~= nil then
-    local saved = tab.load(pth)
-    if saved ~= nil then
-      print("data found")
-      for k,v in pairs(saved[2]) do 
-        data[k] = v 
-      end
-      
-      for t = 1, 16 do
-        for l = 1, 7 do
-          for k = 1, 256 do
-            data[t][l].params[k] = saved[2][t][l].params[k]
-           setmetatable(data[t][l].params[k], {__index =  data[t][l].params[tostring(l)]})
-          end
-        end
-        
-        for l = 8, 14 do
-          for k = 1, 256 do
-            data[t][l].params[k] = saved[2][t][l].params[k]
-           setmetatable(data[t][l].params[k], {__index =  data[t][l].params[tostring(l)]})
-          end
-        end
-      end
-      
-      if saved[1] then params:read(norns.state.data .. saved[1] .. ".pset") end
-      reset_positions()
-    else
-      print("no data")
-    end
-  end
-end
-
-local function save_project(txt)
-  sequencer_metro:stop() 
-  midi_clock:stop()
-  engine.noteOffAll()
-  if txt then
-    tab.save({ txt, data }, norns.state.data .. txt ..".tkt")
-    params:write( norns.state.data .. txt .. ".pset")
-  else
-    print("save cancel")
-  end
-end
-
-local function get_step(x)
-  return (x * 16) - 15
-end
-
-local function get_substep(tr, step)
-    for s = (step*16) - 15, (step*16) + 15 do
-      if data[data.pattern][tr][s] == 1 then
-        return true
-      end
-    end
-end
-
-local function set_view(x)
-    data.ui_index = 1 
-    for k, v in pairs(view) do
-      view[k] = k == x and true or false
-    end
-end
-
-local function sync_tracks(tr)
-    for i=1, 14 do
-      if data[data.pattern].track.div[i] == data[data.pattern].track.div[tr] then
-        data[data.pattern].track.pos[i] = data[data.pattern].track.pos[tr]
-      end
-    end
-end
-
-local function set_loop(tr, start, len)
-    data[data.pattern].track.start[tr] = get_step(start)
-    data[data.pattern].track.len[tr] = get_step(len) + 15
-    sync_tracks(tr)
-end
-
-local function copy_step(src, dst)
-    for i = 0, 15 do
-      data[data.pattern][dst[1]][get_step(dst[2]) + i] = data[data.pattern][src[1]][get_step(src[2]) + i]
-      
-        for k,v in pairs(data[data.pattern][src[1]].params[get_step(src[2]) + i]) do
-          data[data.pattern][dst[1]].params[get_step(dst[2]) + i][k]  = v
-        end
-        
-    end
-end
-
-local function copy_pattern(src, dst)
-    data[dst] = deepcopy(data[src])
-end
-
-local function get_params(tr, step, lock)
-    if not step then
-      return data[data.pattern][tr].params[tostring(tr)]
-    else
-      local res = data[data.pattern][tr].params[step] 
-      if lock then 
-        res.default = data[data.pattern][tr].params[tostring(tr)]
-      end
-      return data[data.pattern][tr].params[step] -- res
-    end
-end
-
-local function tr_change(tr)
-  data.selected[1] = tr
-  redraw_params[1] = get_params(tr)
-  redraw_params[2] = redraw_params[1]
-end
-
-local function is_lock()
-    local src = data.selected
-    if src[2] == false then
-      return tostring(src[1])
-    else
-      return src[2]
-    end
-end
-
-local function open_sample_settings()
-    local p = is_lock()
-    norns.menu.toggle(true)
-    _norns.enc(1, 1000)
-    _norns.enc(2,-9999999)
-    _norns.enc(2, 25 +(( data[data.pattern][data.selected[1]].params[p].sample - 1 ) * 94 ))
-end
-
-local function open_lfo_settings(i)
-     norns.menu.toggle(true)
-    _norns.enc(1, 1000)
-    _norns.enc(2,-9999999)
-    _norns.enc(2, 10 + (i*4))
-end
-
-local function change_filter_type()
-      local tr = data.selected[1]
-      local p = is_lock()
-      data[data.pattern][tr].params[p].ftype =  data[data.pattern][tr].params[p].ftype
-      data[data.pattern][tr].params[p].ftype = (data[data.pattern][tr].params[p].ftype % 2 ) + 1
-end
-
-local function choke_group(tr, sample)
-  if sample == choke[tr] then
-      engine.noteOff(tr)
-  end
-end
-
-local function set_locks(step_param)
-    for k, v in pairs(step_param) do
-      if param_ids[k] ~= nil then
-        params:set(k  .. '_' .. step_param.sample, v)
-      end
-    end
-end
-
-local function metaseq(counter)
-    if data[data.pattern].track.pos[1] == data[data.pattern].track.len[1] - 1 then
-      data.pattern = data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from
-      set_bpm(data[data.pattern].bpm)
-    end
-end
-
-local function seqrun(counter)
-  for tr = 1, 14 do
-
-
-      local start = data[data.pattern].track.start[tr]
-      local len = data[data.pattern].track.len[tr]
-      local div = data[data.pattern].track.div[tr]
-      
-      if (div ~= 6 and counter % dividers[div] == 0) 
-      or (div == 6 and counter % dividers[div] >= 0.5) then
-
-        data[data.pattern].track.pos[tr] = util.clamp((data[data.pattern].track.pos[tr] + 1) % (len ), start, len) -- voice pos
-        data[data.pattern].track.cycle[tr] = counter % 256 == 0 and data[data.pattern].track.cycle[tr] + 1 or data[data.pattern].track.cycle[tr]  --data[data.pattern].track.cycle[tr]
-
-        local mute = data[data.pattern].track.mute[tr]
-        local pos = data[data.pattern].track.pos[tr]
-        local trig = data[data.pattern][tr][pos]
-        
-        if tr > 7 and choke[tr][6] then
-
-            if pos  > choke[tr][5] + choke[tr][6] then
-              midi_out_devices[choke[tr][1]]:note_off(choke[tr][2], choke[tr][3], choke[tr][4])
-            end
-          end
-        
-        if trig == 1 and not mute then
-          
-
-          set_locks(data[data.pattern][tr].params[tostring(tr)])
-          
-          local step_param = get_params(tr, pos, true)
-          
-          data[data.pattern].track.div[tr] = step_param.div ~= data[data.pattern].track.div[tr] and step_param.div or data[data.pattern].track.div[tr]
-
-          if rules[step_param.rule][2](tr, pos) then 
-            
-            step_param = step_param.lock ~= 1 and get_params(tr) or step_param
-            
-            if tr == data.selected[1] then 
-              redraw_params[1] = step_param
-              redraw_params[2] = step_param
-            end
-            
-            if tr < 8 then
-              
-              set_locks(step_param)
-              choke_group(tr, step_param.sample)
-              engine.noteOn(tr, music.note_num_to_freq(step_param.note), 1, step_param.sample)
-              choke[tr] = step_param.sample
-              
-            else
-              
-              for i = 1, 6 do
-                local cc = step_param['cc_' .. i] 
-                local val = step_param['cc_' .. i .. '_val'] 
-               -- print(cc[1],cc[2])
-                  --print('sending cc')
-                  if val >= 0 then
-                    midi_out_devices[step_param.device]:cc(cc, val, step_param.channel)
-                  end
-                --end
-              end
-              
-              if step_param.program_change >= 0 then
-                midi_out_devices[step_param.device]:program_change(step_param.program_change, step_param.channel)
-              end
-
-              midi_out_devices[step_param.device]:note_on( step_param.note, step_param.velocity, step_param.channel )
-              choke[tr] = { step_param.device, step_param.note, step_param.velocity, step_param.channel, pos, step_param.length} 
-            end
-          end
-       end
-    end
-  end
-  
-end
-
-local function clear_substeps(tr, s )
-  for l = s, s + 15 do
-    data[data.pattern][tr][l] = 0
-    data[data.pattern][tr].params[l] = {}
-    setmetatable(data[data.pattern][tr].params[l], {__index =  data[data.pattern][tr].params[tostring(tr)]})
-  end
-end
-
-local function move_params(tr, src, dst )
-  local s = data[data.pattern][tr].params[src]
-  data[data.pattern][tr].params[dst] = s
-end
-
-local function move_substep(tr, step, t)
-   for s = step, step + 15 do
-    data[data.pattern][tr][s] = (s == t) and 1 or 0
-    move_params(tr, step, (s == t) and s or 1) 
-   end
-end
-
-local function make_retrigs(tr, step, t)
-    local t = 16 - t 
-    local offset = data[data.pattern][tr].params[step].offset
-    local params = data[data.pattern][tr].params[step]
-    local st = step + 1
-
-    for s = st + offset, (st + 14) - offset do
-      if t == 16 then
-        data[data.pattern][tr][s] = 0
-      elseif s % t == 1 then
-        data[data.pattern][tr][s] = s - offset == st and 1 or 0
-      else
-        data[data.pattern][tr][s] = ((s + offset) % t == 0) and 1 or 0
-        data[data.pattern][tr].params[s] = params
-      end
-    end
-end
-
-local function have_substeps(tr, step)
-    local st = get_step(step) 
-    for s = st, st + 15 do
-      if data[data.pattern][tr][s] == 1 then
-        return s
-      end
-    end
-end
-
-local function get_tr_start( tr )
-  return math.ceil(data[data.pattern].track.start[tr] / 16)
-end
-
-local function get_tr_len( tr )
-  return math.ceil(data[data.pattern].track.len[tr] / 16)
-end
-
-local function place_note(tr, step, note )
-  data[data.pattern][tr][step] = 1
-  data[data.pattern][tr].params[step].lock = 1
-  data[data.pattern][tr].params[step].note = data[data.pattern][tr].params[step].note
-  data[data.pattern][tr].params[step].note = note
-end
-
-local function midi_event(d)
-  
-  local msg = midi.to_msg(d)
-  local tr = data.selected[1] 
-
-  local pos = data[data.pattern].track.pos[tr]
-  
-  -- REC TOGGLE
-  if msg.cc == REC_CC and msg.val == 127 then
-    PATTERN_REC = not PATTERN_REC
-  -- Note off
-  elseif msg.type == "note_off" then
-    --engine.noteOff(tr)
-  -- Note on
-  elseif msg.type == "note_on" then
-    if not view.sampling then
-      engine.noteOff(tr)
-      engine.noteOn(tr, music.note_num_to_freq(msg.note), msg.vel / 127, data[data.pattern][tr].params[tostring(tr)].sample)
-      if sequencer_metro.is_running and PATTERN_REC then
-        place_note(tr, pos, msg.note)
-      end
-    end
-  end
-
-end
-
-
 
 local trig_params = {  
   [-3] = function(tr, s, d) -- 
@@ -627,11 +661,40 @@ local trig_params = {
   end,
 }
 
-
-
+local controls = {
+  [1] = function(z) -- start / stop, 
+      if z == 1 then
+        if sequencer_metro.is_running then 
+          sequencer_metro:stop() 
+          midi_clock:stop()
+          if MOD then engine.noteOffAll() end
+          for i = 8, 14 do
+              if choke[i][6] then
+                midi_out_devices[choke[i][1]]:note_off(choke[i][2], choke[i][3], choke[i][4])
+              end
+          end
+        else 
+          sequencer_metro:start() 
+          midi_clock:start()
+        end
+        if MOD then
+          reset_positions()
+        end
+      end
+    end,
+  [3] = function(z)  if view.notes_input and z == 1 and sequencer_metro.is_running then PATTERN_REC = not PATTERN_REC end end,
+  [5] = function(z)  if z == 1 then if not view.notes_input then set_view('steps_engine') PATTERN_REC = false end tr_change(1)  end end,
+  [6] = function(z)  if z == 1 then  if not view.notes_input then set_view('steps_midi') PATTERN_REC = false end tr_change(8)  end end,
+  [8] = function(z)  if z == 1 then set_view(view.notes_input and (data.selected[1] < 8 and 'steps_engine' or 'steps_midi') or 'notes_input') end end,
+  [10] = function(z) if z == 1 then set_view(view.sampling and 'steps_engine' or 'sampling') end  end,
+  [11] = function(z) if z == 1 then set_view(view.patterns and 'steps_engine' or 'patterns') end end,
+  [13] = function(z) MOD = z == 1 and true or false if z == 0 then copy = { false, false } end end,
+  [15] = function(z) ALT = z == 1 and true or false end,
+  [16] = function(z) SHIFT = z == 1 and true or false end,
+}
 
 function init()
-  
+
   for i = 1, 4 do
       midi_out_devices[i] = midi.connect(i)
       midi_out_devices[i].event = midi_event
@@ -704,7 +767,7 @@ function init()
             --
             lock = 0, offset = 0, rule = 0, retrig = 0, div = 5,
             ---
-            device = 1,  note = 74 - m,length = 1,
+            device = 1,  note = 74 - m, length = 1,
             channel = 1, velocity = 100,  program_change = -1,
             ---
             cc_1 = 1, cc_1_val = -1, cc_2 = 2, cc_2_val = -1,
@@ -747,30 +810,24 @@ function init()
     ui.init()
 end
 
-local function get_len(tr, s)
-  local maxval = params:lookup_param("end_frame_" .. data[data.pattern][tr].params[s].sample).controlspec.maxval
-  data[data.pattern][tr].params[s].end_frame = maxval
-  data[data.pattern][tr].params[s].loop_end_frame = maxval
-end
-
-
 function enc(n,d)
   norns.encoders.set_sens(1,4)
   norns.encoders.set_sens(2,4)
   norns.encoders.set_sens(3,4)
   norns.encoders.set_accel(1, false)
   norns.encoders.set_accel(2, false)
-  norns.encoders.set_accel(3, true)--((data.ui_index == 3 or data.ui_index == 4) and view.steps_engine) and true or false)
+  norns.encoders.set_accel(3, true)
 
   local tr = data.selected[1]
   local s = data.selected[2] and data.selected[2] or tostring(tr)
   
   if n == 1 then
-    
-      local offset = tr > 7 and 7 or 0
-      data.selected[1] = util.clamp(tr + d, 1 + offset, 7 + offset)
-      tr_change(tr)
       
+      local offset = data.selected[1] > 7 and 7 or 0
+      data.selected[1] = util.clamp(data.selected[1] + d, 1 + offset, 7 + offset)
+      tr_change(data.selected[1])
+      print(offset, data.selected[1])
+
   elseif n == 2 then
     
     if not view.sampling then
@@ -821,25 +878,16 @@ function enc(n,d)
 end
 
 function key(n,z)
-  if n == 1 then 
-    K1_hold = z == 1 and true or false
-    if z == 1 and not view.sampling then 
-      data.ui_index = -4
-    elseif z == 0 and not view.sampling then  
-      data.ui_index = 1
+  
+  K1_hold = (n == 1 and z == 1 and true) or false
+  K3_hold = (n == 3 and z == 1 and true) or false
+  if n == 1 then
+    if K1_hold and not view.sampling then 
+      data.ui_index = -4 
+    else 
+      data.ui_index = 1 
     end
-  end
-
-  if n == 2 and z == 1 then
-
-elseif n == 3 then
-  local sampling_actions = { [1] = engines.rec, [2] = engines.play, [3] = engines.play, [4] = engines.play, [5] = engines.save_and_load, [6] = engines.clear }
-
-  local lfo_1 = {[5] = true, [13] = true, [19] = true }
-  local lfo_2 = {[6] = true, [14] = true, [20] = true }
-
-    K3_hold = z == 1 and true or false
-
+  elseif n == 3 then
     if view.sampling then
         sampling_actions[data.ui_index](z)
     else
@@ -856,7 +904,6 @@ elseif n == 3 then
   end
 end
 
-
 function redraw()
 
   local tr = data.selected[1]
@@ -871,7 +918,7 @@ function redraw()
   
   -- length hack
   if params_data.end_frame == 99999999 and engines.get_meta(params_data.sample).waveform[2] ~= nil then
-    get_len(tr, is_lock())
+    get_sample_len(tr, is_lock())
   end
 
   screen.clear()
@@ -894,61 +941,6 @@ function redraw()
   screen.update()
 
 end
-
-local function mute_track(tr)
-  
-  data[data.pattern].track.mute[tr] = not data[data.pattern].track.mute[tr]
-  if data[data.pattern].track.mute[tr] and tr < 8 then 
-    engine.noteOff(choke[tr])
-  else
-    print('midi mute')
-  end
-
-end
-
-local function set_div(tr, div)
-  data[data.pattern].track.div[tr] = div
-  data[data.pattern][tr].params[tostring(tr)].div = div
-  sync_tracks(tr)
-end
-
-
-
-local controls = {
-  [1] = function(z) -- start / stop, 
-      if z == 1 then
-        if sequencer_metro.is_running then 
-          sequencer_metro:stop() 
-          midi_clock:stop()
-          if MOD then engine.noteOffAll() end
-          for i = 8, 14 do
-              if choke[i][6] then
-                midi_out_devices[choke[i][1]]:note_off(choke[i][2], choke[i][3], choke[i][4])
-              end
-          end
-        else 
-          sequencer_metro:start() 
-          midi_clock:start()
-        end
-        if MOD then
-          reset_positions()
-        end
-      end
-    end,
-  [3] = function(z)  if view.notes_input and z == 1 and sequencer_metro.is_running then PATTERN_REC = not PATTERN_REC end end,
-  [5] = function(z)  if z == 1 then if not view.notes_input then set_view('steps_engine') PATTERN_REC = false end tr_change(1)  end end,
-  [6] = function(z)  if z == 1 then  if not view.notes_input then set_view('steps_midi') PATTERN_REC = false end tr_change(8)  end end,
-  [8] = function(z)  if z == 1 then set_view(view.notes_input and (data.selected[1] < 8 and 'steps_engine' or 'steps_midi') or 'notes_input') end end,
-  [10] = function(z) if z == 1 then set_view(view.sampling and 'steps_engine' or 'sampling') end  end,
-  [11] = function(z) if z == 1 then set_view(view.patterns and 'steps_engine' or 'patterns') end end,
-  [13] = function(z) MOD = z == 1 and true or false if z == 0 then copy = { false, false } end end,
-  [15] = function(z) ALT = z == 1 and true or false end,
-  [16] = function(z) SHIFT = z == 1 and true or false end,
-}
-
-
-
-
 
 function g.key(x, y, z)
   screen.ping()
