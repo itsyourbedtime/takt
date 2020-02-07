@@ -17,7 +17,7 @@ local midi_out_devices = {}
 local REC_CC = 38
 --
 local hold_time, down_time, blink = 0, 0, 1
-local ALT, SHIFT, MOD, PATTERN_REC, K1_hold, K3_hold, ptn_copy = false, false, false, false, false, false, false
+local ALT, SHIFT, MOD, PATTERN_REC, K1_hold, K3_hold, ptn_copy, ptn_change = false, false, false, false, false, false, false, false
 local redraw_params, hold, holdmax, first, second = {}, {}, {}, {}, {}
 local copy = { false, false }
 --
@@ -87,7 +87,7 @@ local function deepcopy(orig)
         for orig_key, orig_value in next, orig, nil do
             copy[deepcopy(orig_key)] = deepcopy(orig_value)
         end
-        setmetatable(copy, deepcopy(getmetatable(orig)))
+        setmetatable(copy, getmetatable(orig))
     else -- number, string, boolean, etc
         copy = orig
     end
@@ -185,6 +185,15 @@ local function set_locks(step_param)
         params:set(k  .. '_' .. step_param.sample, v)
       end
     end
+end
+local function set_cc(step_param)
+  for i = 1, 6 do
+    local cc = step_param['cc_' .. i] 
+    local val = step_param['cc_' .. i .. '_val'] 
+    if val > -1 then
+      midi_out_devices[step_param.device]:cc(cc, val, step_param.channel)
+    end
+  end
 end
 
 local function move_params(tr, src, dst )
@@ -313,9 +322,8 @@ local function reset_positions()
   for i = 1, 14 do
     data[data.pattern].track.pos[i] = 0
   end
+  
 end
-
-
 --- copy / settings
 
 local function copy_step(src, dst)
@@ -359,43 +367,76 @@ local function choke_group(tr, sample)
   end
 end
 
+local function kill_all_midi()
+  for id = 1, 4 do
+    for ch = 1, 16 do
+      for note = 0, 127 do
+         midi_out_devices[id]:note_off(note, 0, ch)
+      end
+    end
+  end
+end
+
+local function notes_off_midi()
+  for i = 8, 14 do
+      if choke[i][6] then
+        midi_out_devices[choke[i][1]]:note_off(choke[i][2], choke[i][3], choke[i][4])
+      end
+  end
+end
 
 -- seq
 
 local function metaseq(counter)
     if data[data.pattern].track.pos[1] == data[data.pattern].track.len[1] - 1 then
-      data.pattern = data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from
-      set_bpm(data[data.pattern].bpm)
+      
+        if ptn_change then
+          
+                  data.pattern = ptn_change
+--[[                  if data.metaseq.from < ptn_change then
+                      data.metaseq.from = data.metaseq.from < ptn_change and ptn_change or 
+                  end
+]]                  --data.metaseq.to = ptn_change
+                  ptn_change = false
+        end
+        
+        
+      if (data.metaseq.to and data.metaseq.from) then
+        data.pattern = data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from
+        set_bpm(data[data.pattern].bpm)
+      end
     end
+end
+
+local function advance_step(tr, counter)
+  local start = data[data.pattern].track.start[tr]
+  local len = data[data.pattern].track.len[tr]
+  data[data.pattern].track.pos[tr] = util.clamp((data[data.pattern].track.pos[tr] + 1) % (len ), start, len) -- voice pos
+  data[data.pattern].track.cycle[tr] = counter % 256 == 0 and data[data.pattern].track.cycle[tr] + 1 or data[data.pattern].track.cycle[tr]  --data[data.pattern].track.cycle[tr]
 end
 
 local function seqrun(counter)
   for tr = 1, 14 do
 
-      local start = data[data.pattern].track.start[tr]
-      local len = data[data.pattern].track.len[tr]
       local div = data[data.pattern].track.div[tr]
       
       if (div ~= 6 and counter % dividers[div] == 0) 
       or (div == 6 and counter % dividers[div] >= 0.5) then
 
-        data[data.pattern].track.pos[tr] = util.clamp((data[data.pattern].track.pos[tr] + 1) % (len ), start, len) -- voice pos
-        data[data.pattern].track.cycle[tr] = counter % 256 == 0 and data[data.pattern].track.cycle[tr] + 1 or data[data.pattern].track.cycle[tr]  --data[data.pattern].track.cycle[tr]
-
+        advance_step(tr, counter)
+        
         local mute = data[data.pattern].track.mute[tr]
         local pos = data[data.pattern].track.pos[tr]
         local trig = data[data.pattern][tr][pos]
         
         if tr > 7 and choke[tr][6] then
-
-            if pos > choke[tr][5] + choke[tr][6] then
-              midi_out_devices[choke[tr][1]]:note_off(choke[tr][2], choke[tr][3], choke[tr][4])
-            end
+          if pos > choke[tr][5] + choke[tr][6] then
+            midi_out_devices[choke[tr][1]]:note_off(choke[tr][2], choke[tr][3], choke[tr][4])
           end
+        end
         
         if trig == 1 and not mute then
           
-
           set_locks(data[data.pattern][tr].params[tostring(tr)])
           
           local step_param = get_params(tr, pos, true)
@@ -420,16 +461,7 @@ local function seqrun(counter)
               
             else
               
-              for i = 1, 6 do
-                local cc = step_param['cc_' .. i] 
-                local val = step_param['cc_' .. i .. '_val'] 
-               -- print(cc[1],cc[2])
-                  --print('sending cc')
-                  if val >= 0 then
-                    midi_out_devices[step_param.device]:cc(cc, val, step_param.channel)
-                  end
-                --end
-              end
+              set_cc(step_param)
               
               if step_param.program_change >= 0 then
                 midi_out_devices[step_param.device]:program_change(step_param.program_change, step_param.channel)
@@ -475,8 +507,8 @@ end
 local track_params = {
   [-6] = function(tr, s, d) -- ptn
       data.pattern = (util.clamp(data.pattern + d, 1, 16))
-      data.metaseq.from = data.pattern
-      data.metaseq.to = data.pattern
+      data.metaseq.from = false --data.pattern
+      data.metaseq.to = false --data.pattern
   end,
   [-5] = function(tr, s, d) -- rnd
         local offset = view.steps_midi and 7 or 0
@@ -667,18 +699,15 @@ local controls = {
         if sequencer_metro.is_running then 
           sequencer_metro:stop() 
           midi_clock:stop()
-          if MOD then engine.noteOffAll() end
-          for i = 8, 14 do
-              if choke[i][6] then
-                midi_out_devices[choke[i][1]]:note_off(choke[i][2], choke[i][3], choke[i][4])
-              end
-          end
+          notes_off_midi()
         else 
           sequencer_metro:start() 
           midi_clock:start()
         end
         if MOD then
+          engine.noteOffAll() 
           reset_positions()
+          kill_all_midi()
         end
       end
     end,
@@ -826,8 +855,7 @@ function enc(n,d)
       local offset = data.selected[1] > 7 and 7 or 0
       data.selected[1] = util.clamp(data.selected[1] + d, 1 + offset, 7 + offset)
       tr_change(data.selected[1])
-      print(offset, data.selected[1])
-
+      
   elseif n == 2 then
     
     if not view.sampling then
@@ -856,8 +884,7 @@ function enc(n,d)
         track_params[data.ui_index](tr, p, d)
       else
         
-        
-        local params_t = data.ui_index < 1 and trig_params or tr < 8 and step_params or tr > 7 and midi_step_params
+          local params_t = data.ui_index < 1 and trig_params or tr < 8 and step_params or tr > 7 and midi_step_params
       
           if type(p) == 'string' then
             params_t[data.ui_index](tr, p, d)
@@ -947,31 +974,18 @@ function g.key(x, y, z)
   
   if view.notes_input and not ALT and not SHIFT then
       local tr = data.selected[1]
-      local sample = data[data.pattern][data.selected[1]].params[tr].sample
-      local note = linn.grid_key(x, y, z)--, tr, tr < 8 and sample)
+      local device = data[data.pattern][tr].params[tr].device
+      local note = linn.grid_key(x, y, z, device and midi_out_devices[device])
       local pos = data[data.pattern].track.pos[tr]
-      local last_note
-      if y < 8 then
-        if  note then 
-          if tr < 8 then
-            engine.noteOn(data.selected[1], music.note_num_to_freq(note), 1, data[data.pattern][data.selected[1]].params[tr].sample)
-          else
-            local id = data[data.pattern][data.selected[1]].params[tr].device
-            local ch = data[data.pattern][data.selected[1]].params[tr].channel
-            midi_out_devices[id]:note_on( note, 100, ch )
-            
-            choke[tr .. 'rt'] = { id, note, 100, ch, pos, 1 } 
-          end
-        elseif choke[tr..'rt'][6] and tr > 7 then
-          midi_out_devices[choke[tr..'rt'][1]]:note_off(choke[tr..'rt'][2], choke[tr..'rt'][3], choke[tr..'rt'][4])
-        end              
-  
-        
-        if sequencer_metro.is_running and note and PATTERN_REC then 
+      
+      if note then 
+        if tr < 8 then
+          engine.noteOn(data.selected[1], music.note_num_to_freq(note), 1, data[data.pattern][data.selected[1]].params[tr].sample)
+        end
+        if sequencer_metro.is_running and PATTERN_REC then 
             place_note(tr, pos, note )
         end
-      end
-      
+      end           
   end    
 
   if y < 8 then
@@ -1047,12 +1061,11 @@ function g.key(x, y, z)
           
           if hold[y] == 1 then
             first[y] = x
-              
-            data.pattern = x
-            ptn_copy = false
-            data.metaseq.from = x
-            data.metaseq.to = x
             
+            ptn_change = x
+            data.metaseq.from = false
+            data.metaseq.to = false
+            ptn_copy = false
           elseif hold[y] == 2 then
             second[y] = x
 
@@ -1093,16 +1106,14 @@ function g.redraw()
   
   for y = 1, 7 do 
     for x = 1, 16 do 
-      --if view.notes_input then 
-        
       if not view.patterns then
         local yy = data.selected[1] > 7 and y + 7 or y 
         if SHIFT then
                         
             if y < 8 and x < 8 then
-              g:led(x, y, 3)
+              g:led(x, y, x == 5 and 6 or 3)
             end
-          
+            
             g:led(data[data.pattern].track.div[yy], y, 15)
             g:led(16, y, data[data.pattern].track.mute[yy] and 15 or 6 )
 
@@ -1134,8 +1145,9 @@ function g.redraw()
       else
           -- patterns
           local level =
-          data.pattern == x and sequencer_metro.is_running and  util.clamp(blink, 5, 14)
-          or (x >= data.metaseq.from and x <= data.metaseq.to) and 9 
+          x == ptn_change  and sequencer_metro.is_running and  util.clamp(blink, 5, 14)
+          or (data.metaseq.from and data.metaseq.to) and x == data.pattern and  util.clamp(blink, 5, 14)
+          or (x >= (data.metaseq.from and data.metaseq.from or data.pattern) and x <= (data.metaseq.to and data.metaseq.to or data.pattern)) and 9 
           or data.pattern == x and 15 
           or 3
           

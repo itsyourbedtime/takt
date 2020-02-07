@@ -601,7 +601,7 @@ function ui.midi_screen(params_data, ui_index, tracks, steps)
         if v[1]  > 3 and  v[3] < 0 then 
           v[3] = '--' 
         elseif  v[1] == 3 then 
-          v[3] = util.round(util.linlin(1, 256, 0.1, 16,v[3]),0.01)
+          v[3] = util.round(util.linlin(1, 256, 1, 16,v[3]),0.01)
         end
         ui.tile(v[1], v[2], v[3], ui_index, lock , v[1] > 6 and v[1] + 6 or false)
       end
