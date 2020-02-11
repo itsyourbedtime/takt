@@ -1201,7 +1201,6 @@ function g.redraw()
   g:led(15, 8, ALT and glow  or 6 )
   g:led(16, 8, SHIFT and glow  or 6 )
   
-  
   g:refresh()
 
 end

@@ -763,6 +763,9 @@ function ui.midi_screen(params_data, ui_index, tracks, steps)
           v[3] = '--' 
         elseif  v[1] == 3 then 
           v[3] = util.round(util.linlin(1, 256, 1, 16,v[3]),0.01)
+       -- elseif v[1] > 6 then
+         -- local cc = string.sub(v[2], 3)
+          --if tonumber(cc) > 100 then  v[2] = 'CC.'.. string.sub(v[2], 4) end
         end
         ui.tile(v[1], v[2], v[3], ui_index, lock , v[1] > 6 and v[1] + 6 or false)
       end

@@ -78,8 +78,6 @@ Engine_Timber_Takt : CroneEngine {
 			loopStartFrame: 0,
 			loopEndFrame: 0,
 
-			freqMultiplier: 1,
-
 			freqModLfo1: 0,
 			freqModLfo2: 0,
 			freqModEnv: 0,
@@ -218,17 +216,6 @@ Engine_Timber_Takt : CroneEngine {
 
 				duckControl = duckControl * EnvGen.ar(Env.new([1, 0, 1], [A2K.kr(duckDuration)], \linear, nil, nil), duckGate);
 
-				// duckControl.poll(8, "duckControl");
-
-				// Debug buffer
-				/*BufWr.ar([
-					phase.linlin(firstFrame, lastFrame, 0, 1),
-					duckControl,
-					K2A.ar(gate),
-					inLoop,
-					duckGate,
-				], debugBuffer.bufnum, Phasor.ar(1, 1, 0, debugBuffer.numFrames), 0);*/
-
 				signal = signal * duckControl;
 			};
 		});
@@ -315,7 +302,7 @@ Engine_Timber_Takt : CroneEngine {
 			SynthDef(name, {
 
 				arg out, reverbSendBus, delaySendBus, sampleRate, freq, transposeRatio, detuneRatio = 1, pitchBendRatio = 1, pitchBendSampleRatio = 1, playMode = 0, gate = 0, killGate = 1, vel = 1, pressure = 0, pressureSample = 0, amp = 1,
-				lfos, lfo1Fade, lfo2Fade, freqModLfo1, freqModLfo2, freqModEnv, freqMultiplier,
+				lfos, lfo1Fade, lfo2Fade, freqModLfo1, freqModLfo2, freqModEnv, 
 				ampAttack, ampDecay, ampSustain, ampRelease, modAttack, modDecay, modSustain, modRelease,
 				downSampleTo, bitDepth, reverbSend, delaySend,
 				filterFreq, filterReso, filterType, filterTracking, filterFreqModLfo1, filterFreqModLfo2, filterFreqModEnv, filterFreqModVel, filterFreqModPressure,
@@ -351,7 +338,7 @@ Engine_Timber_Takt : CroneEngine {
 				freqModRatio = 2.pow((lfo1 * freqModLfo1) + (lfo2 * freqModLfo2) + (modEnvelope * freqModEnv));
 				freq = freq * transposeRatio * detuneRatio;
 				freq = (freq * freqModRatio).clip(20, i_nyquist);
-				freqRatio = (freq / i_origFreq) * freqMultiplier;
+				freqRatio = (freq / i_origFreq) * 1;
 
 				// Player
 				signal = SynthDef.wrap(players[i], [\kr, \kr, \kr, \kr], [freqRatio, sampleRate, gate, playMode]);
@@ -970,8 +957,6 @@ Engine_Timber_Takt : CroneEngine {
 				\lfo1Fade, sample.lfo1Fade,
 				\lfo2Fade, sample.lfo2Fade,
 
-				\freqMultiplier, sample.freqMultiplier,
-
 				\freqModLfo1, sample.freqModLfo1,
 				\freqModLfo2, sample.freqModLfo2,
 				\freqModEnv, sample.freqModEnv,
@@ -1352,11 +1337,6 @@ Engine_Timber_Takt : CroneEngine {
 		this.addCommand(\freqModEnv, "if", {
 			arg msg;
 			this.setArgOnSample(msg[1], \freqModEnv, msg[2]);
-		});
-
-		this.addCommand(\freqMultiplier, "if", {
-			arg msg;
-			this.setArgOnSample(msg[1], \freqMultiplier, msg[2]);
 		});
 
 		this.addCommand(\ampAttack, "if", {
