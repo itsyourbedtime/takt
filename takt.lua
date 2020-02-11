@@ -28,14 +28,14 @@ local choke = { 1, 2, 3, 4, 5, 6, 7, {},{},{},{},{},{},{}, ['8rt'] = {},['9rt'] 
 local dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 2, [6] = 1.5, [7] = 1,} 
 local midi_dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 1, [6] = 0.666, [7] = 0.545,} 
 local sampling_actions = { [1] = engines.rec, [2] = engines.play, [3] = engines.play, [4] = engines.play, [5] = engines.save_and_load, [6] = engines.clear }
-local lfo_1, lfo_2 = {[5] = true, [13] = true, [19] = true }, {[6] = true, [14] = true, [20] = true }
+local lfo_1, lfo_2 = {[5] = true, [13] = true,  }, {[6] = true, [14] = true,  }
 
 local param_ids = { 
   ['quality'] = "quality", ['start_frame'] = "start_frame", ['end_frame'] = "end_frame", ['loop_start_frame'] = "loop_start_frame", ['loop_end_frame'] = "loop_end_frame", ['freq_mod_lfo_1'] = "freq_mod_lfo_1", ['play_mode'] = 'play_mode',
   ['freq_mod_lfo_2'] = "freq_mod_lfo_2", ['filter_type'] = "filter_type", ['filter_freq'] = "filter_freq", ['filter_resonance'] = "filter_resonance", 
   ['filter_freq_mod_lfo_1'] = "filter_freq_mod_lfo_1", ['filter_freq_mod_lfo_2'] = "filter_freq_mod_lfo_2", ['pan'] = "pan", ['amp'] = "amp", 
   ['amp_mod_lfo_1'] = "amp_mod_lfo_1", ['amp_mod_lfo_2'] = "amp_mod_lfo_2", ['amp_env_attack'] = "amp_env_attack", ['amp_env_decay'] = "amp_env_decay", 
-  ['amp_env_sustain'] = "amp_env_sustain", ['amp_env_release'] = "amp_env_release" 
+  ['amp_env_sustain'] = "amp_env_sustain", ['amp_env_release'] = "amp_env_release", ['reverb_send'] = "reverb_send", ["delay_send"] = 'delay_send'
   
 }
 
@@ -222,7 +222,7 @@ end
 local function move_substep(tr, step, t)
    for s = step, step + 15 do
     data[data.pattern][tr][s] = (s == t) and 1 or 0
-    move_params(tr, step, (s == t) and s or 1) 
+    move_params(tr, step, (s == t) and s or step) 
    end
 end
 
@@ -328,14 +328,17 @@ local function get_sample_len(tr, s)
   data[data.pattern][tr].params[s].loop_end_frame = maxval
 end
 
+local function get_sample_start(tr, s)
+  local minval = params:lookup_param("start_frame_" .. data[data.pattern][tr].params[s].sample).controlspec.minval
+  data[data.pattern][tr].params[s].start_frame = minval
+  data[data.pattern][tr].params[s].start_end_frame = minval
+end
 --- copy / settings
 
 local function copy_step(src, dst)
     for i = 0, 15 do
       data[data.pattern][dst[1]][get_step(dst[2]) + i] = data[data.pattern][src[1]][get_step(src[2]) + i]
-        for k,v in pairs(data[data.pattern][src[1]].params[get_step(src[2]) + i]) do
-          data[data.pattern][dst[1]].params[get_step(dst[2]) + i][k]  = v
-        end
+      data[data.pattern][dst[1]].params[get_step(dst[2]) + i] = deepcopy(data[data.pattern][src[1]].params[get_step(src[2]) + i])
     end
 end
 
@@ -348,10 +351,10 @@ local function open_sample_settings()
     norns.menu.toggle(true)
     _norns.enc(1, 1000)
     _norns.enc(2,-9999999)
-    _norns.enc(2, 25 +(( data[data.pattern][data.selected[1]].params[p].sample - 1 ) * 94 ))
+    _norns.enc(2, 56 +(( data[data.pattern][data.selected[1]].params[p].sample - 1 ) * 98 ))
 end
 
-local function open_lfo_settings(i)
+ function open_settings(i)
      norns.menu.toggle(true)
     _norns.enc(1, 1000)
     _norns.enc(2,-9999999)
@@ -361,8 +364,8 @@ end
 local function change_filter_type()
     local tr = data.selected[1]
     local p = is_lock()
-    data[data.pattern][tr].params[p].ftype =  data[data.pattern][tr].params[p].ftype
-    data[data.pattern][tr].params[p].ftype = (data[data.pattern][tr].params[p].ftype % 2 ) + 1
+    data[data.pattern][tr].params[p].filter_type =  data[data.pattern][tr].params[p].filter_type
+    data[data.pattern][tr].params[p].filter_type = (data[data.pattern][tr].params[p].filter_type % 2 ) + 1
 end
 
 local function choke_group(tr, sample)
@@ -593,7 +596,7 @@ local midi_step_params = {
 
 local step_params = {
   [1] = function(tr, s, d) -- sample
-      data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 1, 100)
+      data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 1, 99)
   end, 
   [2] = function(tr, s, d) -- note
       data[data.pattern][tr].params[s].note = util.clamp(data[data.pattern][tr].params[s].note + d, 25, 127)
@@ -601,13 +604,13 @@ local step_params = {
   [3] = function(tr, s, d) -- start
       local sample = data[data.pattern][tr].params[s].sample
       local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval 
-      data[data.pattern][tr].params[s].start_frame = util.clamp(data[data.pattern][tr].params[s].start_frame + ((d) * (length / (K3_hold and 1000 or 100))), 0,  length)
+      data[data.pattern][tr].params[s].start_frame = util.clamp(data[data.pattern][tr].params[s].start_frame + ((d) * (length / 500)), 0,  length)
       data[data.pattern][tr].params[s].lool_start_frame = data[data.pattern][tr].params[s].lool_start_frame
   end,
   [4] = function(tr, s, d) -- len
       local sample = data[data.pattern][tr].params[s].sample
       local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval
-      data[data.pattern][tr].params[s].end_frame = util.clamp(data[data.pattern][tr].params[s].end_frame + ((d) * (length / (K3_hold and 1000 or 100))), 0, length)
+      data[data.pattern][tr].params[s].end_frame = util.clamp(data[data.pattern][tr].params[s].end_frame + ((d) * (length / 500)), 0, length)
       data[data.pattern][tr].params[s].loop_end_frame = data[data.pattern][tr].params[s].loop_end_frame
    end,
   [5] = function(tr, s, d) -- freq mod lfo 1 freq_lfo1
@@ -617,10 +620,10 @@ local step_params = {
         data[data.pattern][tr].params[s].freq_mod_lfo_2 = util.clamp(data[data.pattern][tr].params[s].freq_mod_lfo_2 + d / 100, 0, 1)
   end,
   [7] = function(tr, s, d) -- volume
-        data[data.pattern][tr].params[s].amp = util.clamp(data[data.pattern][tr].params[s].amp + d / 10  , -48, 16)
+        data[data.pattern][tr].params[s].amp = util.clamp(data[data.pattern][tr].params[s].amp + d  , -48, 16)
   end,
   [8] = function(tr, s, d) -- pan
-        data[data.pattern][tr].params[s].pan = util.clamp(data[data.pattern][tr].params[s].pan + d / 10 , -1, 1)
+        data[data.pattern][tr].params[s].pan = util.clamp(data[data.pattern][tr].params[s].pan + d / 20 , -1, 1)
   end,
   [9] = function(tr, s, d) -- atk
     data[data.pattern][tr].params[s].amp_env_attack = util.clamp(data[data.pattern][tr].params[s].amp_env_attack + d / 50, 0, 5)
@@ -638,7 +641,7 @@ local step_params = {
         data[data.pattern][tr].params[s].amp_mod_lfo_1 = util.clamp(data[data.pattern][tr].params[s].amp_mod_lfo_1 + d / 100, 0, 1)
   end,
   [14] = function(tr, s, d) -- amp mod lfo 2
-        data[data.pattern][tr].params[s].amp_mod_lfo_2 = util.clamp(data[data.pattern][tr].params[s].amp_mod_lfo_2 + d / 100, 0, 1)
+        data[data.pattern][tr].params[s].filter_freq_mod_lfo_2 = util.clamp(data[data.pattern][tr].params[s].filter_freq_mod_lfo_2 + d / 100, 0, 1)
   end,
   [15] = function(tr, s, d) -- sample rate
       data[data.pattern][tr].params[s].quality = util.clamp(data[data.pattern][tr].params[s].quality + d, 1, 5)
@@ -653,10 +656,10 @@ local step_params = {
       data[data.pattern][tr].params[s].filter_resonance = util.clamp(data[data.pattern][tr].params[s].filter_resonance + d / 10, 0, 1)
   end,
   [19] = function(tr, s, d) -- filter cutoff mod lfo 1
-        data[data.pattern][tr].params[s].filter_freq_mod_lfo_1 = util.clamp(data[data.pattern][tr].params[s].filter_freq_mod_lfo_1 + d / 100, 0, 1)
+      data[data.pattern][tr].params[s].delay_send = util.clamp(data[data.pattern][tr].params[s].delay_send + d / 2, -40, 0)
   end,
   [20] = function(tr, s, d) -- filter cutoff mod lfo 2
-        data[data.pattern][tr].params[s].filter_freq_mod_lfo_2 = util.clamp(data[data.pattern][tr].params[s].filter_freq_mod_lfo_2 + d / 100, 0, 1)
+        data[data.pattern][tr].params[s].reverb_send = util.clamp(data[data.pattern][tr].params[s].reverb_send + d / 2, -40, 0)
   end,
   
 }
@@ -739,7 +742,7 @@ function init()
 
 
     for t = 1, 16 do
-      data[t] = { bpm = 120, sync_div = 5,
+      data[t] = { bpm = 120, sync_div = 0,
         track = { 
           mute = {}, 
           pos = {},
@@ -786,8 +789,11 @@ function init()
             filter_type = 1, filter_freq = 20000, filter_resonance = 0,
             --
             freq_mod_lfo_1 = 0, freq_mod_lfo_2 = 0,
-            amp_mod_lfo_1 = 0, amp_mod_lfo_2 = 0,
-            filter_freq_mod_lfo_1 = 0, filter_freq_mod_lfo_2 = 0,
+            amp_mod_lfo_1 = 0, --amp_mod_lfo_2 = 0,
+            --filter_freq_mod_lfo_1 = 0,  
+            filter_freq_mod_lfo_2 = 0,
+            
+            reverb_send = -40, delay_send = -40, 
         }
     
         data[t][m].params[tostring(m)] = {
@@ -830,17 +836,18 @@ function init()
     redraw_metro:start()
     midi_clock = beatclock:new()
     midi_clock.on_step = function() end
-    midi_clock:bpm_change(data[data.pattern].bpm * dividers[data[data.pattern].sync_div])
+    midi_clock:bpm_change( util.round(data[data.pattern].bpm / midi_dividers[util.clamp(data[data.pattern].sync_div, 1, 7)]))
     midi_clock.send = false
 
     engines.init()
     ui.init()
+    K3_hold = true
 end
 
 function enc(n,d)
   norns.encoders.set_sens(1,4)
   norns.encoders.set_sens(2,4)
-  norns.encoders.set_sens(3,4)
+  norns.encoders.set_sens(3,3)
   norns.encoders.set_accel(1, false)
   norns.encoders.set_accel(2, false)
   norns.encoders.set_accel(3, true)
@@ -916,14 +923,18 @@ function key(n,z)
     if view.sampling then
         sampling_actions[data.ui_index](z)
     else
-      if data.ui_index == 1 and z == 1 then
+      if (data.ui_index == 1 or data.ui_index == 3 or data.ui_index == 4) and z == 1 then
         open_sample_settings()
       elseif (data.ui_index == 17 or data.ui_index == 18) and z == 1 then
         change_filter_type()
       elseif lfo_1[data.ui_index] then
-        open_lfo_settings(1)
+        open_settings(1)
       elseif lfo_2[data.ui_index] then
-        open_lfo_settings(2)
+        open_settings(2)
+      elseif data.ui_index == 19 then
+        open_settings(3.5)
+      elseif data.ui_index == 20 then
+        open_settings(5.5)
       end
     end
   end
@@ -935,17 +946,14 @@ function redraw()
   local pos = data[data.pattern].track.pos[tr]
   local params_data = get_params(tr, sequencer_metro.is_running and pos or false, true)
   
+  
+  
   if data.selected[2] then
     redraw_params[1] = get_params(data.selected[1], get_step(data.selected[2]), true)
   elseif not data.selected[2] then
     redraw_params[1] = redraw_params[2]
   end
   
-  -- length hack
-  if params_data.end_frame == 99999999 and engines.get_meta(params_data.sample).waveform[2] ~= nil then
-    get_sample_len(tr, is_lock())
-  end
-
   screen.clear()
   
   ui.head(redraw_params[1], data, view, K1_hold, rules, PATTERN_REC)
@@ -957,6 +965,17 @@ function redraw()
   else
     if data.selected[1] < 8 then
       local meta = engines.get_meta(params_data.sample)
+      -- length hack
+  
+      local maxl = params:lookup_param("end_frame_" .. data[data.pattern][tr].params[is_lock()].sample).controlspec.maxval 
+      if params_data.end_frame == 99999999 and engines.get_meta(params_data.sample).waveform[2] ~= nil then
+        get_sample_len(tr, is_lock())
+      elseif params_data.end_frame > maxl then
+        get_sample_len(tr, is_lock())
+      elseif params_data.start_frame > maxl then-- params:lookup_param("end_frame_" .. data[data.pattern][tr].params[is_lock()].sample).controlspec.maxval then
+        get_sample_start(tr, is_lock())
+      end
+
       ui.main_screen(redraw_params[1], data.ui_index, meta)
     else
       ui.midi_screen(redraw_params[1], data.ui_index, data[data.pattern].track, data[data.pattern])
@@ -1059,8 +1078,14 @@ function g.key(x, y, z)
           
           if hold[y] == 1 then
             first[y] = x
+            if ptn_change_pending then
+                data.pattern = ptn_change_pending
+                ptn_change_pending = false
+            else
+                ptn_change_pending = x
+            end
+
             
-            ptn_change_pending = x
             data.metaseq.from = false
             data.metaseq.to = false
             ptn_copy = false

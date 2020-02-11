@@ -27,7 +27,7 @@ end
 unrequire("lib/timber_takt")
 engine.name = "Timber_Takt"
 local Timber = include("lib/timber_takt")
-local NUM_SAMPLES = 100 
+local NUM_SAMPLES = 99 
 local wait_metro 
 
 function engines.load_folder(file, add)

@@ -19,7 +19,6 @@ Timber.sample_changed_callback = function() end
 Timber.meta_changed_callback = function() end
 Timber.waveform_changed_callback = function() end
 Timber.play_positions_changed_callback = function() end
-Timber.views_changed_callback = function() end
 
 Timber.setup_params_dirty = false
 Timber.filter_dirty = false
@@ -67,6 +66,10 @@ specs.LFO_1_FREQ = ControlSpec.new(0.05, 20, "exp", 0, 2, "Hz")
 specs.LFO_2_FREQ = ControlSpec.new(0.05, 20, "exp", 0, 4, "Hz")
 options.LFO_WAVE_SHAPE = {"Sine", "Triangle", "Saw", "Square", "Random"}
 specs.LFO_FADE = ControlSpec.new(-10, 10, "lin", 0, 0, "s")
+
+--specs.ReverbDelayTime = ControlSpec.new(0.1, 60, "lin", 0, 2, "s")
+--specs.ReverbDamp = ControlSpec.new(0, 5, "lin", 0, 0, "")
+
 options.FILTER_TYPE = {"Low Pass", "High Pass"}
 specs.FILTER_FREQ = ControlSpec.new(20, 20000, "exp", 0, 20000, "Hz")
 specs.FILTER_RESONANCE = ControlSpec.new(0, 1, "lin", 0, 0, "")
@@ -82,6 +85,10 @@ specs.MOD_ENV_RELEASE = ControlSpec.new(0.003, 10, "lin", 0, 1, "s")
 options.QUALITY = {"Nasty", "Low", "SP-1200", "Medium", "High"}
 specs.AMP = ControlSpec.new(-48, 16, 'db', 0, 0, "dB")
 
+specs.delay_time = ControlSpec.new(0.0001, 5, 'exp', 0, 0.1, 'secs')
+specs.delay_feedback = ControlSpec.new(0, 1, 'lin', 0, 0.5, '')
+specs.delay_level = ControlSpec.DB:copy()
+specs.delay_level.default = -10
 
 -- 27khz - 8 bit, 
 QUALITY_SAMPLE_RATES = { 8000, 16000, 26040, 32000, 48000 }
@@ -265,7 +272,6 @@ function Timber.clear_samples(first, last)
     Timber.play_positions_changed_callback(i)
   end
   
-  Timber.views_changed_callback(nil)
   Timber.setup_params_dirty = true
 end
 
@@ -327,7 +333,6 @@ local function move_copy_update(from_id, to_id)
   Timber.filter_dirty = true
   Timber.env_dirty = true
   Timber.lfo_functions_dirty = true
-  Timber.views_changed_callback(nil)
 end
 
 function Timber.move_sample(from_id, to_id)
@@ -514,7 +519,6 @@ local function set_marker(id, param_prefix)
   end
   
   waveform_last_edited = {id = id, param = param_prefix .. id}
-  Timber.views_changed_callback(id)
 end
 
 function Timber.osc_event(path, args, from)
@@ -571,30 +575,6 @@ local function format_frame_number(sample_id)
   end
 end
 
-local function format_by_percentage(sample_id)
-  return function(param)
-    local return_string
-    if params:get("scale_by_" .. sample_id) == 1 then
-      return_string = util.round(param:get(), 0.1) .. "%"
-    else
-      return_string = "N/A"
-    end
-    return return_string
-  end
-end
-
-local function format_by_length(sample_id)
-  return function(param)
-    local return_string
-    if params:get("scale_by_" .. sample_id) == 2 then
-      return_string = Formatters.format_secs(param)
-    else
-      return_string = "N/A"
-    end
-    return return_string
-  end
-end
-
 local function format_fade(param)
   local secs = param:get()
   local suffix = " in"
@@ -634,28 +614,61 @@ function Timber.add_params()
   end}
   params:add{type = "control", id = "lfo_1_freq", name = "LFO1 Freq", controlspec = specs.LFO_1_FREQ, formatter = Formatters.format_freq, action = function(value)
     engine.lfo1Freq(value)
-    lfos_last_edited = {id = nil, param = "lfo_1_freq"}
-    Timber.views_changed_callback(nil)
-    Timber.lfo_1_dirty = true
   end}
   params:add{type = "option", id = "lfo_1_wave_shape", name = "LFO1 Shape", options = options.LFO_WAVE_SHAPE, default = 1, action = function(value)
     engine.lfo1WaveShape(value - 1)
-    lfos_last_edited = {id = nil, param = "lfo_1_wave_shape"}
-    Timber.views_changed_callback(nil)
-    Timber.lfo_1_dirty = true
   end}
   params:add{type = "control", id = "lfo_2_freq", name = "LFO2 Freq", controlspec = specs.LFO_2_FREQ, formatter = Formatters.format_freq, action = function(value)
     engine.lfo2Freq(value)
-    lfos_last_edited = {id = nil, param = "lfo_2_freq"}
-    Timber.views_changed_callback(nil)
-    Timber.lfo_2_dirty = true
   end}
   params:add{type = "option", id = "lfo_2_wave_shape", name = "LFO2 Shape", options = options.LFO_WAVE_SHAPE, default = 4, action = function(value)
     engine.lfo2WaveShape(value - 1)
-    lfos_last_edited = {id = nil, param = "lfo_2_wave_shape"}
-    Timber.views_changed_callback(nil)
-    Timber.lfo_2_dirty = true
   end}
+  
+
+  params:add_separator()
+  params:add_control("delay_time", "Delay: time", specs.delay_time, Formatters.secs_as_ms)
+  params:set_action("delay_time", engine.delayTime)
+  
+  params:add_control("delay_feedback", "Delay: feedback", specs.delay_feedback, Formatters.unipolar_as_percentage)
+  params:set_action("delay_feedback", engine.feedbackAmount)
+  
+  params:add_control("delay_level", "Delay: level", specs.delay_level, Formatters.default)
+  params:set_action("delay_level", engine.delayLevel)
+  params:add_separator()
+  -- reverb time
+  params:add_control("reverb_time", "Reverb: delay time", controlspec.new(0.1, 60.00, "lin", 0.01, 10, "s"))
+  params:set_action("reverb_time", function(value) engine.reverbTime(value) end)
+  -- dampening 
+  params:add_control("reverb_damp", "Reverb: damp", controlspec.new(0.0, 1.0, "lin", 0.01, 0.1, ""))
+  params:set_action("reverb_damp", function(value) engine.reverbDamp(value) end)
+  -- reverb size
+  params:add_control("reverb_size", "Reverb: size", controlspec.new(0, 5.0, "lin", 0.01, 3.00, ""))
+  params:set_action("reverb_size", function(value) engine.reverbSize(value) end)
+  -- diffusion
+  params:add_control("reverb_diff", "Reverb: diff", controlspec.new(0.0, 1.0, "lin", 0.01, 0.707, ""))
+  params:set_action("reverb_diff", function(value) engine.reverbDiff(value) end)
+  -- mod depth
+  params:add_control("reverb_mod_depth", "Reverb: mod depth", controlspec.new(0.0, 1.0, "lin", 0.01, 0.1, ""))
+  params:set_action("reverb_mod_depth", function(value) engine.reverbModDepth(value) end)
+  -- mod rate
+  params:add_control("reverb_mod_freq", "Reverb: mod freq", controlspec.new(0.0, 10.0, "lin", 0.01, 2, "hz"))
+  params:set_action("reverb_mod_freq", function(value) engine.reverbModFreq(value) end)
+	-- low, mid, high, lowcut, highcut
+  params:add_control("reverb_low", "Reverb: low mult", controlspec.new(0.0, 1.0, "lin", 0.01, 1, ""))
+  params:set_action("reverb_low", function(value) engine.reverbLow(value) end)
+  
+  params:add_control("reverb_mid", "Reverb: mid mult", controlspec.new(0.0, 1.0, "lin", 0.01, 1, ""))
+  params:set_action("reverb_mid", function(value) engine.reverbMid(value) end)
+  
+  params:add_control("reverb_high", "Reverb: high mult", controlspec.new(0.0, 1.0, "lin", 0.01, 1, ""))
+  params:set_action("reverb_high", function(value) engine.reverbHigh(value) end)
+  
+  params:add_control("reverb_lowcut", "Reverb: low cut", controlspec.new(100, 6000, "lin", 0.01, 500, "hz"))
+  params:set_action("reverb_lowcut", function(value) engine.reverbLowcut(value) end)
+  
+  params:add_control("reverb_highcut", "Reverb: high cut", controlspec.new(1000, 10000, "lin", 0.01, 2000, "hz"))
+  params:set_action("reverb_highcut", function(value) engine.reverbHighcut(value) end)
 
 end
 
@@ -676,48 +689,35 @@ function Timber.add_sample_params(id, include_beat_params, extra_params)
       params:set("loop_start_frame_" .. id, 0)
       params:lookup_param("loop_end_frame_" .. id).controlspec.maxval = MAX_FRAMES
       params:set("loop_end_frame_" .. id, MAX_FRAMES)
-      --params:lookup_param("by_length_" .. id).controlspec.minval = 0
-      --params:lookup_param("by_length_" .. id).controlspec.maxval = 100000
       local play_mode_param = params:lookup_param("play_mode_" .. id)
       play_mode_param.options = options.PLAY_MODE_BUFFER
       play_mode_param.count = #options.PLAY_MODE_BUFFER
       
       engine.loadSample(id, value)
-      Timber.views_changed_callback(id)
     else
       samples_meta[id].manual_load = false
     end
   end}
   params:add{type = "trigger", id = "clear_" .. id, name = "Clear", action = function(value)
     Timber.clear_samples(id)
-    Timber.views_changed_callback(id)
   end}
   
   params:add{type = "option", id = "quality_" .. id, name = "Quality", options = options.QUALITY, default = #options.QUALITY, action = function(value)
     engine.downSampleTo(id, QUALITY_SAMPLE_RATES[value])
     engine.bitDepth(id, QUALITY_BIT_DEPTHS[value])
-    Timber.views_changed_callback(id)
-    Timber.setup_params_dirty = true
   end}
   params:add{type = "number", id = "transpose_" .. id, name = "Transpose", min = -48, max = 48, default = 0, formatter = format_st, action = function(value)
     engine.transpose(id, value)
-    Timber.views_changed_callback(id)
-    Timber.setup_params_dirty = true
   end}
   params:add{type = "number", id = "detune_cents_" .. id, name = "Detune", min = -100, max = 100, default = 0, formatter = format_cents, action = function(value)
     engine.detuneCents(id, value)
-    Timber.views_changed_callback(id)
-    Timber.setup_params_dirty = true
   end}
-  
-
   
   params:add_separator()
   
+
   params:add{type = "option", id = "play_mode_" .. id, name = "Play Mode", options = options.PLAY_MODE_BUFFER, default = options.PLAY_MODE_BUFFER_DEFAULT, action = function(value)
     set_play_mode(id, lookup_play_mode(id))
-    waveform_last_edited = {id = id}
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "start_frame_" .. id, name = "Start", controlspec = ControlSpec.new(0, MAX_FRAMES, "lin", 1, 0), formatter = format_frame_number(id), action = function(value)
     set_marker(id, "start_frame_")
@@ -738,155 +738,117 @@ function Timber.add_sample_params(id, include_beat_params, extra_params)
   
   params:add{type = "control", id = "freq_mod_lfo_1_" .. id, name = "Freq Mod (LFO1)", controlspec = ControlSpec.UNIPOLAR, action = function(value)
     engine.freqModLfo1(id, value)
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "freq_mod_lfo_2_" .. id, name = "Freq Mod (LFO2)", controlspec = ControlSpec.UNIPOLAR, action = function(value)
     engine.freqModLfo2(id, value)
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "freq_mod_env_" .. id, name = "Freq Mod (Env)", controlspec = ControlSpec.BIPOLAR, action = function(value)
     engine.freqModEnv(id, value)
-    Timber.views_changed_callback(id)
   end}
   
   params:add_separator()
 
   params:add{type = "option", id = "filter_type_" .. id, name = "Filter Type", options = options.FILTER_TYPE, default = 1, action = function(value)
     engine.filterType(id, value - 1)
-    Timber.filter_dirty = true
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "filter_freq_" .. id, name = "Filter Cutoff", controlspec = specs.FILTER_FREQ, formatter = Formatters.format_freq, action = function(value)
     engine.filterFreq(id, value)
-    filter_last_edited = {id = id, param = "filter_freq_" .. id}
-    Timber.filter_dirty = true
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "filter_resonance_" .. id, name = "Filter Resonance", controlspec = specs.FILTER_RESONANCE, action = function(value)
     engine.filterReso(id, value)
-    filter_last_edited = {id = id, param = "filter_resonance_" .. id}
-    Timber.filter_dirty = true
-    Timber.views_changed_callback(id)
   end}
 
   params:add{type = "control", id = "filter_freq_mod_lfo_1_" .. id, name = "Filter Cutoff Mod (LFO1)", controlspec = ControlSpec.UNIPOLAR, action = function(value)
     engine.filterFreqModLfo1(id, value)
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "filter_freq_mod_lfo_2_" .. id, name = "Filter Cutoff Mod (LFO2)", controlspec = ControlSpec.UNIPOLAR, action = function(value)
     engine.filterFreqModLfo2(id, value)
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "filter_freq_mod_env_" .. id, name = "Filter Cutoff Mod (Env)", controlspec = ControlSpec.BIPOLAR, action = function(value)
     engine.filterFreqModEnv(id, value)
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "filter_freq_mod_vel_" .. id, name = "Filter Cutoff Mod (Vel)", controlspec = ControlSpec.BIPOLAR, action = function(value)
     engine.filterFreqModVel(id, value)
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "filter_freq_mod_pressure_" .. id, name = "Filter Cutoff Mod (Pres)", controlspec = ControlSpec.BIPOLAR, action = function(value)
     engine.filterFreqModPressure(id, value)
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "filter_tracking_" .. id, name = "Filter Tracking", controlspec = specs.FILTER_TRACKING, formatter = format_ratio_to_one, action = function(value)
     engine.filterTracking(id, value)
-    Timber.views_changed_callback(id)
   end}
 
   params:add_separator()
 
   params:add{type = "control", id = "pan_" .. id, name = "Pan", controlspec = ControlSpec.PAN, formatter = Formatters.bipolar_as_pan_widget, action = function(value)
     engine.pan(id, value)
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "pan_mod_lfo_1_" .. id, name = "Pan Mod (LFO1)", controlspec = ControlSpec.UNIPOLAR, action = function(value)
     engine.panModLfo1(id, value)
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "pan_mod_lfo_2_" .. id, name = "Pan Mod (LFO2)", controlspec = ControlSpec.UNIPOLAR, action = function(value)
     engine.panModLfo2(id, value)
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "pan_mod_env_" .. id, name = "Pan Mod (Env)", controlspec = ControlSpec.BIPOLAR, action = function(value)
     engine.panModEnv(id, value)
-    Timber.views_changed_callback(id)
   end}
   
   params:add{type = "control", id = "amp_" .. id, name = "Amp", controlspec = specs.AMP, action = function(value)
     engine.amp(id, value)
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "amp_mod_lfo_1_" .. id, name = "Amp Mod (LFO1)", controlspec = ControlSpec.UNIPOLAR, action = function(value)
     engine.ampModLfo1(id, value)
-    Timber.views_changed_callback(id)
   end}
   params:add{type = "control", id = "amp_mod_lfo_2_" .. id, name = "Amp Mod (LFO2)", controlspec = ControlSpec.UNIPOLAR, action = function(value)
     engine.ampModLfo2(id, value)
-    Timber.views_changed_callback(id)
   end}
   
   params:add_separator()
   
   params:add{type = "control", id = "amp_env_attack_" .. id, name = "Amp Env Attack", controlspec = specs.AMP_ENV_ATTACK, formatter = Formatters.format_secs, action = function(value)
     engine.ampAttack(id, value)
-    Timber.views_changed_callback(id)
-    Timber.env_dirty = true
   end}
   params:add{type = "control", id = "amp_env_decay_" .. id, name = "Amp Env Decay", controlspec = specs.AMP_ENV_DECAY, formatter = Formatters.format_secs, action = function(value)
     engine.ampDecay(id, value)
-    Timber.views_changed_callback(id)
-    Timber.env_dirty = true
   end}
   params:add{type = "control", id = "amp_env_sustain_" .. id, name = "Amp Env Sustain", controlspec = specs.AMP_ENV_SUSTAIN, action = function(value)
     engine.ampSustain(id, value)
-    Timber.views_changed_callback(id)
-    Timber.env_dirty = true
   end}
   params:add{type = "control", id = "amp_env_release_" .. id, name = "Amp Env Release", controlspec = specs.AMP_ENV_RELEASE, formatter = Formatters.format_secs, action = function(value)
     engine.ampRelease(id, value)
-    Timber.views_changed_callback(id)
-    Timber.env_dirty = true
   end}
 
   params:add_separator()
 
   params:add{type = "control", id = "mod_env_attack_" .. id, name = "Mod Env Attack", controlspec = specs.MOD_ENV_ATTACK, formatter = Formatters.format_secs, action = function(value)
     engine.modAttack(id, value)
-    Timber.views_changed_callback(id)
-    Timber.env_dirty = true
   end}
   params:add{type = "control", id = "mod_env_decay_" .. id, name = "Mod Env Decay", controlspec = specs.MOD_ENV_DECAY, formatter = Formatters.format_secs, action = function(value)
     engine.modDecay(id, value)
-    Timber.views_changed_callback(id)
-    Timber.env_dirty = true
   end}
   params:add{type = "control", id = "mod_env_sustain_" .. id, name = "Mod Env Sustain", controlspec = specs.MOD_ENV_SUSTAIN, action = function(value)
     engine.modSustain(id, value)
-    Timber.views_changed_callback(id)
-    Timber.env_dirty = true
   end}
   params:add{type = "control", id = "mod_env_release_" .. id, name = "Mod Env Release", controlspec = specs.MOD_ENV_RELEASE, formatter = Formatters.format_secs, action = function(value)
     engine.modRelease(id, value)
-    Timber.views_changed_callback(id)
-    Timber.env_dirty = true
   end}
   
   params:add_separator()
   
+
+  
+  params:add_control("delay_send_" .. id, "Delay send", ControlSpec.new(-40, 0, 'db', 0, -40, "dB"))
+  params:set_action("delay_send_" .. id, function(value) engine.delaySend(id, value) end)
+  params:add_control("reverb_send_" .. id, "Reverb send", ControlSpec.new(-40, 0, 'db', 0, -40, "dB"))
+  params:set_action("reverb_send_" .. id, function(value) engine.reverbSend(id, value) end)
+
+
   params:add{type = "control", id = "lfo_1_fade_" .. id, name = "LFO1 Fade", controlspec = specs.LFO_FADE, formatter = format_fade, action = function(value)
     if value < 0 then value = specs.LFO_FADE.minval - 0.00001 + math.abs(value) end
     engine.lfo1Fade(id, value)
-    lfos_last_edited = {id = id, param = "lfo_1_fade_" .. id}
-    Timber.views_changed_callback(id)
-    Timber.lfo_1_dirty = true
   end}
   params:add{type = "control", id = "lfo_2_fade_" .. id, name = "LFO2 Fade", controlspec = specs.LFO_FADE, formatter = format_fade, action = function(value)
     if value < 0 then value = specs.LFO_FADE.minval - 0.00001 + math.abs(value) end
     engine.lfo2Fade(id, value)
-    lfos_last_edited = {id = id, param = "lfo_2_fade_" .. id}
-    Timber.views_changed_callback(id)
-    Timber.lfo_2_dirty = true
   end}
   
   Timber.num_sample_params = Timber.num_sample_params + 1

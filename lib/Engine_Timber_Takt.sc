@@ -1,11 +1,11 @@
-// CroneEngine_Timber_Takt
+// CroneEngine_Timber
 //
 // v1.0.0 Beta 6 Mark Eats
 
 Engine_Timber_Takt : CroneEngine {
 
 	var maxVoices = 7;
-	var maxSamples = 256;
+	var maxSamples = 100;
 	var killDuration = 0.003;
 	var waveformDisplayRes = 60;
 
@@ -18,8 +18,12 @@ Engine_Timber_Takt : CroneEngine {
 	var synthNames;
 	var lfos;
 	var mixer;
+	var reverb;
+	var delay;
 
 	var lfoBus;
+	var fxBus;
+	var reverbBus;
 	var mixerBus;
 
 	var loadQueue;
@@ -42,6 +46,7 @@ Engine_Timber_Takt : CroneEngine {
 	*new { arg context, doneCallback;
 		^super.new(context, doneCallback);
 	}
+	
 
 	alloc {
 
@@ -55,6 +60,8 @@ Engine_Timber_Takt : CroneEngine {
 
 			channels: 0,
 			sampleRate: 0,
+			reverbSend: -40,
+			delaySend: -40,
 			numFrames: 0,
 
 			transpose: 0,
@@ -114,6 +121,8 @@ Engine_Timber_Takt : CroneEngine {
 
 		lfoBus = Bus.control(context.server, 2);
 		mixerBus = Bus.audio(context.server, 2);
+		fxBus = Bus.audio(context.server, 2);
+		reverbBus = Bus.audio(context.server, 2);
 		players = Array.newClear(4);
 
 		loadQueue = Array.new(maxSamples);
@@ -272,7 +281,7 @@ Engine_Timber_Takt : CroneEngine {
 
 
 		// SynthDefs
-
+		
 		lfos = SynthDef(\lfos, {
 			arg out, lfo1Freq = 2, lfo1WaveShape = 0, lfo2Freq = 4, lfo2WaveShape = 3;
 			var lfos, i_controlLag = 0.005;
@@ -305,10 +314,10 @@ Engine_Timber_Takt : CroneEngine {
 
 			SynthDef(name, {
 
-				arg out, sampleRate, freq, transposeRatio, detuneRatio = 1, pitchBendRatio = 1, pitchBendSampleRatio = 1, playMode = 0, gate = 0, killGate = 1, vel = 1, pressure = 0, pressureSample = 0, amp = 1,
+				arg out, reverbSendBus, delaySendBus, sampleRate, freq, transposeRatio, detuneRatio = 1, pitchBendRatio = 1, pitchBendSampleRatio = 1, playMode = 0, gate = 0, killGate = 1, vel = 1, pressure = 0, pressureSample = 0, amp = 1,
 				lfos, lfo1Fade, lfo2Fade, freqModLfo1, freqModLfo2, freqModEnv, freqMultiplier,
 				ampAttack, ampDecay, ampSustain, ampRelease, modAttack, modDecay, modSustain, modRelease,
-				downSampleTo, bitDepth,
+				downSampleTo, bitDepth, reverbSend, delaySend,
 				filterFreq, filterReso, filterType, filterTracking, filterFreqModLfo1, filterFreqModLfo2, filterFreqModEnv, filterFreqModVel, filterFreqModPressure,
 				pan, panModLfo1, panModLfo2, panModEnv, ampModLfo1, ampModLfo2;
 
@@ -380,10 +389,44 @@ Engine_Timber_Takt : CroneEngine {
 				// Amp
 				signal = signal * lfo1.range(1 - ampModLfo1, 1) * lfo2.range(1 - ampModLfo2, 1) * ampEnvelope * killEnvelope * vel.linlin(0, 1, 0.1, 1);
 				signal = tanh(signal * amp.dbamp * (1 + pressure)).softclip;
-
 				Out.ar(out, signal);
+				Out.ar(delaySendBus, signal * delaySend.dbamp);
+				Out.ar(reverbSendBus, signal * reverbSend.dbamp);
 			}).add;
 		});
+
+
+		// delay
+		delay = SynthDef(\delay, {
+
+   		  arg in, out, delayTime=0.3, feedbackAmount =0.5, level = -10; 
+		  	var signal = In.ar(in, 2);
+		  	var feedback = LocalIn.ar(2);
+        signal = DelayC.ar(signal + feedback, maxdelaytime: 4, delaytime: delayTime);
+
+				LocalOut.ar(signal * feedbackAmount);
+				Out.ar(out, signal * level.dbamp); 
+
+
+		}).play(target:context.xg, args: [\in, fxBus, \out, context.out_b], addAction: \addToTail);
+
+
+
+		// reverb
+		reverb = SynthDef(\reverb, {
+
+			 arg in, out, reverbTime=10, damp=0.1, size=3.0, diff=0.7, modDepth=0.1, modFreq=2, low=1, mid=1, high=1, lowcut=500, highcut=200;
+			
+			 var signal = In.ar(in, 2);       
+      signal = JPverb.ar(signal, reverbTime, damp, size, diff, modDepth, modFreq, low, mid, high, lowcut, highcut);
+
+       //signal = Greyhole.ar(signal, reverbTime, damp, size, diff, feedback, modDepth, modFreq ); 
+
+			 Out.ar(out, signal); // * level.dbamp);
+
+
+		}).play(target:context.xg, args: [\in, reverbBus, \out, mixerBus,], addAction: \addToTail);
+
 
 
 		// Mixer and FX
@@ -403,7 +446,9 @@ Engine_Timber_Takt : CroneEngine {
 		}).play(target:context.xg, args: [\in, mixerBus, \out, context.out_b], addAction: \addToTail);
 
 
+
 		this.addCommands;
+		
 	}
 
 
@@ -888,12 +933,21 @@ Engine_Timber_Takt : CroneEngine {
 
 			newVoice.theSynth = Synth.new(defName: defName, args: [
 				\out, mixerBus,
+				
+				\reverbSendBus, reverbBus,
+				\reverbSend, sample.reverbSend,
+
+				\delaySendBus, fxBus,
+				\delaySend, sample.delaySend,
+
+				
 				\bufnum, buffer.bufnum,
 
 				\voiceId, voiceId,
 				\sampleId, sampleId,
 
 				\sampleRate, sample.sampleRate,
+				
 				\numFrames, sample.numFrames,
 				\freq, freq,
 				\transposeRatio, sample.transpose.midiratio,
@@ -1142,7 +1196,64 @@ Engine_Timber_Takt : CroneEngine {
 		this.addCommand(\lfo2WaveShape, "i", { arg msg;
 			lfos.set(\lfo2WaveShape, msg[1]);
 		});
+		
+    // FX commands
+    
+    // Delay
 
+		this.addCommand(\delayTime, "f", { arg msg;
+			delay.set(\delayTime, msg[1]);
+		});
+		
+		this.addCommand(\feedbackAmount, "f", { arg msg;
+			delay.set(\feedbackAmount, msg[1]);
+		});
+
+		this.addCommand(\delayLevel, "f", { arg msg;
+			delay.set(\level, msg[1]);
+		});
+    
+    // Reverb
+		
+		this.addCommand(\reverbTime, "f", { arg msg;
+			reverb.set(\reverbTime, msg[1]);
+		});
+		
+		this.addCommand(\reverbDamp, "f", { arg msg;
+			reverb.set(\damp, msg[1]);
+		});
+		
+		this.addCommand(\reverbSize, "f", { arg msg;
+			reverb.set(\size, msg[1]);
+		});
+		
+		this.addCommand(\reverbDiff, "f", { arg msg;
+			reverb.set(\diff, msg[1]);
+		});
+
+		this.addCommand(\reverbModDepth, "f", { arg msg;
+			reverb.set(\modDepth, msg[1]);
+		});
+
+		this.addCommand(\reverbModFreq, "f", { arg msg;
+			reverb.set(\modFreq, msg[1]);
+		});
+		
+		this.addCommand(\reverbLow, "f", { arg msg;
+			reverb.set(\low, msg[1]);
+		});
+		this.addCommand(\reverbMid, "f", { arg msg;
+			reverb.set(\mid, msg[1]);
+		});
+		this.addCommand(\reverbHigh, "f", { arg msg;
+			reverb.set(\high, msg[1]);
+		});
+		this.addCommand(\reverbLowcut, "f", { arg msg;
+			reverb.set(\lowcut, msg[1]);
+		});
+		this.addCommand(\reverbHighcut, "f", { arg msg;
+			reverb.set(\highcut, msg[1]);
+		});
 
 		// Sample commands
 
@@ -1298,6 +1409,16 @@ Engine_Timber_Takt : CroneEngine {
 			this.setArgOnSample(msg[1], \bitDepth, msg[2]);
 		});
 
+		this.addCommand(\reverbSend, "ii", {
+			arg msg;
+			this.setArgOnSample(msg[1], \reverbSend, msg[2]);
+		});
+
+		this.addCommand(\delaySend, "ii", {
+			arg msg;
+			this.setArgOnSample(msg[1], \delaySend, msg[2]);
+		});
+
 		this.addCommand(\filterFreq, "if", {
 			arg msg;
 			this.setArgOnSample(msg[1], \filterFreq, msg[2]);
@@ -1401,6 +1522,8 @@ Engine_Timber_Takt : CroneEngine {
 		players.free;
 		voiceGroup.free;
 		lfos.free;
+		reverb.free;
+		delay.free;
 		mixer.free;
 	}
 }
