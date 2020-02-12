@@ -27,7 +27,7 @@ local view = { steps_engine = true, steps_midi = false, notes_input = false, sam
 local choke = { 1, 2, 3, 4, 5, 6, 7, {},{},{},{},{},{},{}, ['8rt'] = {},['9rt'] = {},['10rt'] = {},['11rt'] = {}, ['12rt'] = {}, ['13rt'] = {},['14rt'] = {} }
 local dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 2, [6] = 1.5, [7] = 1,} 
 local midi_dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 1, [6] = 0.666, [7] = 0.545,} 
-local sampling_actions = { [1] = engines.rec, [2] = engines.play, [3] = engines.play, [4] = engines.play, [5] = engines.save_and_load, [6] = engines.clear }
+local sampling_actions = {[-1] = function()end,[0]=function()end, [1] = engines.rec, [2] = engines.play, [3] = engines.save_and_load, [4] = engines.clear, [5] = engines.play, [6] = engines.play }
 local lfo_1, lfo_2 = {[5] = true, [13] = true,  }, {[6] = true, [14] = true,  }
 
 local param_ids = { 
@@ -667,10 +667,10 @@ local step_params = {
 local sampling_params = {
   [-1] = function(d)engines.sc.mode = util.clamp(engines.sc.mode + d, 1, 4) engines.set_mode() end,
   [0] = function(d) engines.sc.source = util.clamp(engines.sc.source + d, 1, 2) engines.set_source() end,
-  [5] = function(d) engines.sc.slot = util.clamp(engines.sc.slot + d, 1, 100) end,
-  [3] = function(d) engines.sc.start = util.clamp(engines.sc.start + d / 10, 0, engines.sc.length) engines.set_start(engines.sc.start) end,
-  [4] = function(d) engines.sc.length = util.clamp(engines.sc.length + d / 10, engines.sc.start, engines.sc.max_length) end,
-  [6] = function(d) end, --play
+  [3] = function(d) engines.sc.slot = util.clamp(engines.sc.slot + d, 1, 100) end,
+  [5] = function(d) engines.sc.start = util.clamp(engines.sc.start + d / (20), 0, engines.sc.length) engines.set_start(engines.sc.start) end,
+  [6] = function(d) engines.sc.length = util.clamp(engines.sc.length + d / (20), engines.sc.start, engines.sc.rec_length) end,
+  [4] = function(d) end, --play
   [1] = function(d) end, --save
   [2] = function(d) end, --clear
   [7] = function(d) end, --clear
@@ -716,8 +716,8 @@ local controls = {
   [5] = function(z)  if z == 1 then if not view.notes_input then set_view('steps_engine') PATTERN_REC = false end tr_change(1)  end end,
   [6] = function(z)  if z == 1 then  if not view.notes_input then set_view('steps_midi') PATTERN_REC = false end tr_change(8)  end end,
   [8] = function(z)  if z == 1 then set_view(view.notes_input and (data.selected[1] < 8 and 'steps_engine' or 'steps_midi') or 'notes_input') end end,
-  [10] = function(z) if z == 1 then set_view(view.sampling and 'steps_engine' or 'sampling') end  end,
-  [11] = function(z) if z == 1 then set_view(view.patterns and 'steps_engine' or 'patterns') end end,
+  [10] = function(z) if z == 1 then set_view(view.sampling and 'steps_engine' or 'sampling') data.selected[1] = 1 end  end,
+  [11] = function(z) if z == 1 then set_view(view.patterns and 'steps_engine' or 'patterns') data.selected[1] = 1 end end,
   [13] = function(z) MOD = z == 1 and true or false if z == 0 then copy = { false, false } end end,
   [15] = function(z) ALT = z == 1 and true or false end,
   [16] = function(z) SHIFT = z == 1 and true or false end,
@@ -789,10 +789,8 @@ function init()
             filter_type = 1, filter_freq = 20000, filter_resonance = 0,
             --
             freq_mod_lfo_1 = 0, freq_mod_lfo_2 = 0,
-            amp_mod_lfo_1 = 0, --amp_mod_lfo_2 = 0,
-            --filter_freq_mod_lfo_1 = 0,  
-            filter_freq_mod_lfo_2 = 0,
-            
+            amp_mod_lfo_1 = 0, filter_freq_mod_lfo_2 = 0,
+            --
             reverb_send = -40, delay_send = -40, 
         }
     
@@ -845,7 +843,7 @@ function init()
 end
 
 function enc(n,d)
-  norns.encoders.set_sens(1,4)
+  norns.encoders.set_sens(1,3)
   norns.encoders.set_sens(2,4)
   norns.encoders.set_sens(3,3)
   norns.encoders.set_accel(1, false)
@@ -922,6 +920,7 @@ function key(n,z)
   elseif n == 3 then
     if view.sampling then
         sampling_actions[data.ui_index](z)
+        if z == 1 and ((data.ui_index == 1 and engines.sc.rec) or data.ui_index == 4) then ui.waveform = {} end
     else
       if (data.ui_index == 1 or data.ui_index == 3 or data.ui_index == 4) and z == 1 then
         open_sample_settings()

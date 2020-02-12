@@ -12,6 +12,7 @@ local engines = {
               start = 0,
               length = 60,
               max_length = 60,
+              rec_length = 0,
               mode = 1, 
               source = 1,
               slot = 1,
@@ -199,7 +200,8 @@ end
 
 
 function engines.rec(state)
-  if state ~= 1 then return false end
+  if state ~= 1 then return false
+  else
     engines.sc.rec = not engines.sc.rec 
     for i = 1, 2 do
       if engines.sc.rec then
@@ -211,13 +213,14 @@ function engines.rec(state)
          softcut.rec(i, 1)
       else
           engines.sc.length = engines.sc.position
+          engines.sc.rec_length = engines.sc.position
           softcut.poll_stop_phase()
           softcut.rec(i, 0)
           engines.sc.start = 0
           softcut.position(i, 0)
       end
     end
-  
+  end
 end
 
 
@@ -261,6 +264,7 @@ function engines.clear(state)
   if state ~= 1 then return false end
   engines.sc.start = 0
   engines.sc.length = engines.sc.max_length
+  engines.sc.rec_length = 0
   engines.sc.position = 0
   softcut.buffer_clear()
   for i = 1, 2 do
@@ -284,9 +288,9 @@ function engines.save_and_load(state)
     
     print('saving', start, length)
     print(PATH..name)
-    if mode == 1 or mode == 2 then
+    if mode == 1 then
       softcut.buffer_write_stereo (PATH .. name, start, length)
-    elseif mode == 3 then
+    elseif mode == 2 or mode == 3 then
       softcut.buffer_write_mono (PATH .. name, start, length, 1)
     elseif mode == 4 then
       softcut.buffer_write_mono (PATH .. name, start, length, 2)
@@ -300,7 +304,6 @@ function engines.save_and_load(state)
         Timber.load_sample(slot, PATH .. name)
         params:set('play_mode_' .. slot, 2)
         wait_metro:stop()
-        --engines.clear()
       end
     end
       

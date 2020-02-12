@@ -20,12 +20,6 @@ Timber.meta_changed_callback = function() end
 Timber.waveform_changed_callback = function() end
 Timber.play_positions_changed_callback = function() end
 
-Timber.setup_params_dirty = false
-Timber.filter_dirty = false
-Timber.env_dirty = false
-Timber.lfo_functions_dirty = false
-Timber.lfo_1_dirty = false
-Timber.lfo_2_dirty = false
 Timber.bpm = 120
 Timber.display = "id" -- Can be "id", "note" or "none"
 Timber.shift_mode = false
@@ -85,10 +79,20 @@ specs.MOD_ENV_RELEASE = ControlSpec.new(0.003, 10, "lin", 0, 1, "s")
 options.QUALITY = {"Nasty", "Low", "SP-1200", "Medium", "High"}
 specs.AMP = ControlSpec.new(-48, 16, 'db', 0, 0, "dB")
 
-specs.delay_time = ControlSpec.new(0.0001, 5, 'exp', 0, 0.1, 'secs')
-specs.delay_feedback = ControlSpec.new(0, 1, 'lin', 0, 0.5, '')
-specs.delay_level = ControlSpec.DB:copy()
-specs.delay_level.default = -10
+specs.DELAY_TIME = ControlSpec.new(0.0001, 5, 'exp', 0, 0.1, 'secs')
+specs.DELAY_FEEDBACK = ControlSpec.new(0, 1, 'lin', 0, 0.5, '')
+specs.DELAY_LEVEL = ControlSpec.DB:copy()
+specs.DELAY_LEVEL.default = -10
+
+specs.REVERB_TIME = controlspec.new(0.1, 60.00, "lin", 0.01, 10, "s")
+specs.REVERB_DAMP = controlspec.new(0.0, 1.0, "lin", 0.01, 0.1, "")
+specs.REVERB_SIZE = controlspec.new(0, 5.0, "lin", 0.01, 3.00, "")
+specs.REVERB_DIFF =  controlspec.new(0.0, 1.0, "lin", 0.01, 0.707, "")
+specs.REVERB_MOD_DEPTH = controlspec.new(0.0, 1.0, "lin", 0.01, 0.1, "")
+specs.REVERB_MOD_FREQ = controlspec.new(0.0, 10.0, "lin", 0.01, 2, "hz")
+specs.REVERB_MULT = controlspec.new(0.0, 1.0, "lin", 0.01, 1, "")
+specs.REVERB_LOWCUT = controlspec.new(100, 6000, "lin", 0.01, 500, "hz")
+specs.REVERB_HIGHCUT = controlspec.new(1000, 10000, "lin", 0.01, 2000, "hz")
 
 -- 27khz - 8 bit, 
 QUALITY_SAMPLE_RATES = { 8000, 16000, 26040, 32000, 48000 }
@@ -272,7 +276,6 @@ function Timber.clear_samples(first, last)
     Timber.play_positions_changed_callback(i)
   end
   
-  Timber.setup_params_dirty = true
 end
 
 
@@ -328,11 +331,6 @@ local function move_copy_update(from_id, to_id)
     Timber.waveform_changed_callback(id)
     Timber.play_positions_changed_callback(id)
   end
-  
-  Timber.setup_params_dirty = true
-  Timber.filter_dirty = true
-  Timber.env_dirty = true
-  Timber.lfo_functions_dirty = true
 end
 
 function Timber.move_sample(from_id, to_id)
@@ -627,47 +625,47 @@ function Timber.add_params()
   
 
   params:add_separator()
-  params:add_control("delay_time", "Delay: time", specs.delay_time, Formatters.secs_as_ms)
+  params:add_control("delay_time", "Delay: time", specs.DELAY_TIME, Formatters.secs_as_ms)
   params:set_action("delay_time", engine.delayTime)
   
-  params:add_control("delay_feedback", "Delay: feedback", specs.delay_feedback, Formatters.unipolar_as_percentage)
+  params:add_control("delay_feedback", "Delay: feedback", specs.DELAY_FEEDBACK, Formatters.unipolar_as_percentage)
   params:set_action("delay_feedback", engine.feedbackAmount)
   
-  params:add_control("delay_level", "Delay: level", specs.delay_level, Formatters.default)
+  params:add_control("delay_level", "Delay: level", specs.DELAY_LEVEL, Formatters.default)
   params:set_action("delay_level", engine.delayLevel)
   params:add_separator()
   -- reverb time
-  params:add_control("reverb_time", "Reverb: delay time", controlspec.new(0.1, 60.00, "lin", 0.01, 10, "s"))
+  params:add_control("reverb_time", "Reverb: time", specs.REVERB_TIME) 
   params:set_action("reverb_time", function(value) engine.reverbTime(value) end)
   -- dampening 
-  params:add_control("reverb_damp", "Reverb: damp", controlspec.new(0.0, 1.0, "lin", 0.01, 0.1, ""))
+  params:add_control("reverb_damp", "Reverb: damp", specs.REVERB_DAMP)
   params:set_action("reverb_damp", function(value) engine.reverbDamp(value) end)
   -- reverb size
-  params:add_control("reverb_size", "Reverb: size", controlspec.new(0, 5.0, "lin", 0.01, 3.00, ""))
+  params:add_control("reverb_size", "Reverb: size", specs.REVERB_SIZE)
   params:set_action("reverb_size", function(value) engine.reverbSize(value) end)
   -- diffusion
-  params:add_control("reverb_diff", "Reverb: diff", controlspec.new(0.0, 1.0, "lin", 0.01, 0.707, ""))
+  params:add_control("reverb_diff", "Reverb: diff", specs.REVERB_DIFF)
   params:set_action("reverb_diff", function(value) engine.reverbDiff(value) end)
   -- mod depth
-  params:add_control("reverb_mod_depth", "Reverb: mod depth", controlspec.new(0.0, 1.0, "lin", 0.01, 0.1, ""))
+  params:add_control("reverb_mod_depth", "Reverb: mod depth", specs.REVERB_MOD_DEPTH)
   params:set_action("reverb_mod_depth", function(value) engine.reverbModDepth(value) end)
   -- mod rate
-  params:add_control("reverb_mod_freq", "Reverb: mod freq", controlspec.new(0.0, 10.0, "lin", 0.01, 2, "hz"))
+  params:add_control("reverb_mod_freq", "Reverb: mod freq", specs.REVERB_MOD_FREQ)
   params:set_action("reverb_mod_freq", function(value) engine.reverbModFreq(value) end)
 	-- low, mid, high, lowcut, highcut
-  params:add_control("reverb_low", "Reverb: low mult", controlspec.new(0.0, 1.0, "lin", 0.01, 1, ""))
+  params:add_control("reverb_low", "Reverb: low mult", specs.REVERB_MULT)
   params:set_action("reverb_low", function(value) engine.reverbLow(value) end)
   
-  params:add_control("reverb_mid", "Reverb: mid mult", controlspec.new(0.0, 1.0, "lin", 0.01, 1, ""))
+  params:add_control("reverb_mid", "Reverb: mid mult", specs.REVERB_MULT)
   params:set_action("reverb_mid", function(value) engine.reverbMid(value) end)
   
-  params:add_control("reverb_high", "Reverb: high mult", controlspec.new(0.0, 1.0, "lin", 0.01, 1, ""))
+  params:add_control("reverb_high", "Reverb: high mult", specs.REVERB_MULT)
   params:set_action("reverb_high", function(value) engine.reverbHigh(value) end)
   
-  params:add_control("reverb_lowcut", "Reverb: low cut", controlspec.new(100, 6000, "lin", 0.01, 500, "hz"))
+  params:add_control("reverb_lowcut", "Reverb: low cut", specs.REVERB_LOWCUT)
   params:set_action("reverb_lowcut", function(value) engine.reverbLowcut(value) end)
   
-  params:add_control("reverb_highcut", "Reverb: high cut", controlspec.new(1000, 10000, "lin", 0.01, 2000, "hz"))
+  params:add_control("reverb_highcut", "Reverb: high cut", specs.REVERB_HIGHCUT)
   params:set_action("reverb_highcut", function(value) engine.reverbHighcut(value) end)
 
 end

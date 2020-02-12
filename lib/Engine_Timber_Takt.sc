@@ -7,7 +7,7 @@ Engine_Timber_Takt : CroneEngine {
 	var maxVoices = 7;
 	var maxSamples = 100;
 	var killDuration = 0.003;
-	var waveformDisplayRes = 60;
+	var waveformDisplayRes = 40;
 
 	var voiceGroup;
 	var voiceList;
@@ -185,7 +185,7 @@ Engine_Timber_Takt : CroneEngine {
 
 				SendReply.kr(trig: Impulse.kr(15), cmdName: '/replyPlayPosition', values: [sampleId, voiceId, (phase / numFrames).clip]);
 
-				signal = BufRd.ar(numChannels: i + 1, bufnum: bufnum, phase: phase, interpolation: 4);
+				signal = BufRd.ar(numChannels: i + 1, bufnum: bufnum, phase: phase, interpolation: 2);
 
 				// Duck across loop points and near start/end to avoid clicks (3ms * 2, playback time)
 				duckDuration = 0.003;
@@ -386,7 +386,7 @@ Engine_Timber_Takt : CroneEngine {
 		// delay
 		delay = SynthDef(\delay, {
 
-   		  arg in, out, delayTime=0.3, feedbackAmount =0.5, level = -10; 
+   		  arg in, out, delayTime=0.3, feedbackAmount =0.5, level = 0; 
 		  	var signal = In.ar(in, 2);
 		  	var feedback = LocalIn.ar(2);
         signal = DelayC.ar(signal + feedback, maxdelaytime: 4, delaytime: delayTime);
