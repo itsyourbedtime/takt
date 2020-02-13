@@ -12,8 +12,9 @@ local midi_name_lookup = {
   [1] = 'note', [2] = 'velocity', [3] = 'length', [4] = 'channel', [5] = 'device', [6] = 'program_change', 
   [7] = 'cc_1_val', [8] = 'cc_2_val', [9] = 'cc_3_val', [10] = 'cc_3_val', [11] = 'cc_4_val', [12] = 'cc_4_val'
 }
+local filter = controlspec.WIDEFREQ
 
-ui.init  = function()
+function ui.init()
   ui.vu_l, ui.vu_r, ui.vu_o_l, ui.vu_o_r = poll.set("amp_in_l"), poll.set("amp_in_r"), poll.set("amp_out_l"), poll.set("amp_out_r")
   ui.vu_l.time, ui.vu_r.time, ui.vu_o_l.time, ui.vu_o_r.time = 1 / 24, 1 / 24, 1 / 24, 1 / 24
   
@@ -40,14 +41,11 @@ function ui.stop_polls()
   ui.vu_o_r:stop()
 end
 
-
-
 local function get_step(x) return (x * 16) - 15 end
 
 local function set_brightness(n, i) screen.level(i == n and 6 or 2) end
 
 local function metro_icon(x, y, pos)
-  local metroicon = pos % 4
   screen.level(0)
   screen.move(x + 2, y + 5)
   screen.line(x + 7, y)
@@ -55,13 +53,12 @@ local function metro_icon(x, y, pos)
   screen.line(x + 3, y + 5)
   screen.stroke()
   screen.move(x + 7, y + 3)
-  screen.line(metroicon <= 1 and (x + 4) or (x + 10), y ) 
+  screen.line(pos % 4 > 1 and (x + 4) or (x + 10), y ) 
   screen.stroke()
 
 end
 
 local dividers  = {[0] = 'OFF', '1/8', '1/4', '1/2', '3/4', '--', '3/2', '2x' } 
-
 
 function ui.head(params_data, data, view, k1, rules, PATTERN_REC)
   local tr = data.selected[1]
@@ -226,8 +223,6 @@ function ui.draw_env(x, y, t, params_data, ui_index)
   
 end
 
-local filter = controlspec.WIDEFREQ
-
 function ui.draw_filter(x, y, params_data, ui_index)
 
     screen.level(2)
@@ -384,13 +379,13 @@ function ui.draw_note(x, y, params_data, index, ui_index, lock)
   set_brightness(index, ui_index)
   screen.rect(x,  y, 20, 17)
   screen.fill()
-
+  local offset = params_data.detune_cents and util.linlin(-100,100,-5,5, params_data.detune_cents) or 0
   screen.level(0)
-  screen.rect(x + 7, y + 6, 3, 2)
-  screen.rect(x + 8, y + 6, 3, 1)
-  screen.rect(x + 10, y +2, 1, 4)
-  screen.rect(x + 11, y + 3, 1, 1)
-  screen.rect(x + 12, y + 4, 1, 1)
+  screen.rect(x + 7 + offset, y + 6, 3, 2)
+  screen.rect(x + 8 + offset, y + 6, 3, 1)
+  screen.rect(x + 10 + offset, y +2, 1, 4)
+  screen.rect(x + 11 + offset, y + 3, 1, 1)
+  screen.rect(x + 12 + offset, y + 4, 1, 1)
   screen.fill()
   
   local note_name = params_data.note
@@ -856,18 +851,14 @@ function ui.sampling(sampling, ui_index, pos)
     ui.waveform[p] = sampling.source == 1 and { ui.in_l, ui.in_r } or { ui.out_l, ui.out_r }
   end
   
-  
   screen.level(1)
   
 
- for k,v in pairs(ui.waveform) do
-    --screen.level(1)
-    --screen.rect(3 + wpos(1), 43, wpos(k), 1)
-    --screen.fill()
+  for k,v in pairs(ui.waveform) do
 
     local l = sampling.mode == 1 and 1 or sampling.mode == 4 and 2 or 1
     local r = sampling.mode == 1 and 2 or sampling.mode == 3 and 1 or 2 
-    --screen.line_width(util.clamp(40 -  #ui.waveform, 1, 15))
+
     screen.move(3 + wpos(k) , 44)
     screen.line(3 + wpos(k) , 43 - util.clamp((ui.waveform[k][l]),0, 15))
     screen.stroke()
@@ -876,7 +867,7 @@ function ui.sampling(sampling, ui_index, pos)
     screen.line(3  +wpos(k), 44 + util.clamp((ui.waveform[k][r]),0, 15))
     screen.stroke()
   end
-  --screen.line_width(1)
+
   if sampling.play then
     screen.level(2)
     local pos_ = util.linlin(0,sampling.rec_length, 3, 123, pos)

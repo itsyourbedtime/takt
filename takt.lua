@@ -21,6 +21,9 @@ local ALT, SHIFT, MOD, PATTERN_REC, K1_hold, K3_hold, ptn_copy, ptn_change_pendi
 local redraw_params, hold, holdmax, first, second = {}, {}, {}, {}, {}
 local copy = { false, false }
 local freq_map = controlspec.WIDEFREQ
+local amp_map = controlspec.DB
+      amp_map.maxval = 16
+local send_map = controlspec.DB
 
 --
 local g = grid.connect()
@@ -33,7 +36,8 @@ local sampling_actions = {[-1] = function()end,[0]=function()end, [1] = engines.
 local lfo_1, lfo_2 = {[5] = true, [13] = true,  }, {[6] = true, [14] = true,  }
 
 local param_ids = { 
-  ['quality'] = "quality", ['start_frame'] = "start_frame", ['end_frame'] = "end_frame", ['loop_start_frame'] = "loop_start_frame", ['loop_end_frame'] = "loop_end_frame", ['freq_mod_lfo_1'] = "freq_mod_lfo_1", ['play_mode'] = 'play_mode',
+  ['quality'] = "quality", ['start_frame'] = "start_frame", ['end_frame'] = "end_frame", ['loop_start_frame'] = "loop_start_frame", ['loop_end_frame'] = "loop_end_frame", 
+  ['freq_mod_lfo_1'] = "freq_mod_lfo_1", ['play_mode'] = 'play_mode', ['detune_cents'] = 'detune_cents',
   ['freq_mod_lfo_2'] = "freq_mod_lfo_2", ['filter_type'] = "filter_type", ['filter_freq'] = "filter_freq", ['filter_resonance'] = "filter_resonance", 
   ['filter_freq_mod_lfo_1'] = "filter_freq_mod_lfo_1", ['filter_freq_mod_lfo_2'] = "filter_freq_mod_lfo_2", ['pan'] = "pan", ['amp'] = "amp", 
   ['amp_mod_lfo_1'] = "amp_mod_lfo_1", ['amp_mod_lfo_2'] = "amp_mod_lfo_2", ['amp_env_attack'] = "amp_env_attack", ['amp_env_decay'] = "amp_env_decay", 
@@ -602,28 +606,38 @@ local step_params = {
       data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 1, 99)
   end, 
   [2] = function(tr, s, d) -- note
-      data[data.pattern][tr].params[s].note = util.clamp(data[data.pattern][tr].params[s].note + d, 25, 127)
+      if K3_hold then 
+        data[data.pattern][tr].params[s].detune_cents = util.clamp(data[data.pattern][tr].params[s].detune_cents + d, -100, 100)
+      else
+        data[data.pattern][tr].params[s].note = util.clamp(data[data.pattern][tr].params[s].note + d, 25, 127)
+      end
   end,
   [3] = function(tr, s, d) -- start
       local sample = data[data.pattern][tr].params[s].sample
-      local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval 
-      data[data.pattern][tr].params[s].start_frame = util.clamp(data[data.pattern][tr].params[s].start_frame + ((d) * (length / 500)), 0,  length)
-      data[data.pattern][tr].params[s].lool_start_frame = data[data.pattern][tr].params[s].lool_start_frame
+      local pspec = params:lookup_param("start_frame_" .. sample).controlspec
+      local start = util.clamp(pspec:unmap( data[data.pattern][tr].params[s].start_frame ) + (d/200), 0, 1)
+      data[data.pattern][tr].params[s].start_frame = pspec:map(start) 
+      data[data.pattern][tr].params[s].lool_start_frame = pspec:map(start)
   end,
   [4] = function(tr, s, d) -- len
       local sample = data[data.pattern][tr].params[s].sample
-      local length = params:lookup_param("end_frame_" .. sample).controlspec.maxval
-      data[data.pattern][tr].params[s].end_frame = util.clamp(data[data.pattern][tr].params[s].end_frame + ((d) * (length / 500)), 0, length)
-      data[data.pattern][tr].params[s].loop_end_frame = data[data.pattern][tr].params[s].loop_end_frame
+      local pspec = params:lookup_param("end_frame_" .. sample).controlspec
+      local length = util.clamp(pspec:unmap( data[data.pattern][tr].params[s].end_frame ) + (d / 200), 0, 1)
+      data[data.pattern][tr].params[s].end_frame = pspec:map(length)  
+      data[data.pattern][tr].params[s].loop_end_frame = pspec:map(length)
    end,
   [5] = function(tr, s, d) -- freq mod lfo 1 freq_lfo1
+        --[[          local pspec = params:lookup_param("lfo_1_freq").controlspec
+                  local freq = util.clamp(pspec:unmap( params:get('lfo_1_freq') ) + (d / 10), 0, 1)
+                  params:set('lfo_1_freq', pspec:map(freq))
+        ]]
       data[data.pattern][tr].params[s].freq_mod_lfo_1 = util.clamp(data[data.pattern][tr].params[s].freq_mod_lfo_1 + d / 100, 0, 1)
   end,
   [6] = function(tr, s, d) -- freq mod lfo 2
         data[data.pattern][tr].params[s].freq_mod_lfo_2 = util.clamp(data[data.pattern][tr].params[s].freq_mod_lfo_2 + d / 100, 0, 1)
   end,
   [7] = function(tr, s, d) -- volume
-        data[data.pattern][tr].params[s].amp = util.clamp(data[data.pattern][tr].params[s].amp + d  , -48, 16)
+        data[data.pattern][tr].params[s].amp = amp_map:map(util.clamp(amp_map:unmap(data[data.pattern][tr].params[s].amp) + d / 200, 0,1 ))
   end,
   [8] = function(tr, s, d) -- pan
         data[data.pattern][tr].params[s].pan = util.clamp(data[data.pattern][tr].params[s].pan + d / 20 , -1, 1)
@@ -655,15 +669,13 @@ local step_params = {
   [17] = function(tr, s, d) 
       local fr = freq_map:unmap(data[data.pattern][tr].params[s].filter_freq)
       fr = util.clamp(fr + d / 200,0.1,1)
-      
       data[data.pattern][tr].params[s].filter_freq = freq_map:map(fr)
-      --util.clamp(data[data.pattern][tr].params[s].filter_freq + (d * 100), 0, 20000)
   end,
   [18] = function(tr, s, d) 
       data[data.pattern][tr].params[s].filter_resonance = util.clamp(data[data.pattern][tr].params[s].filter_resonance + d / 20, 0, 1)
   end,
   [19] = function(tr, s, d)
-      data[data.pattern][tr].params[s].delay_send = util.clamp(data[data.pattern][tr].params[s].delay_send + d / 2, -40, 0)
+        data[data.pattern][tr].params[s].delay_send = util.clamp(data[data.pattern][tr].params[s].delay_send + d / 2, -40, 0)
   end,
   [20] = function(tr, s, d) 
         data[data.pattern][tr].params[s].reverb_send = util.clamp(data[data.pattern][tr].params[s].reverb_send + d / 2, -40, 0)
@@ -787,8 +799,9 @@ function init()
             ---
             lock = 0, offset = 0, rule = 0, retrig = 0, div = 5, 
             ---
-            sample = l, note = 60, play_mode = 3, quality = 5, amp = 0, pan = 0, 
-            start_frame = 0, loop_start_frame = 0, end_frame = 99999999, loop_end_frame = 99999999,
+            sample = l, note = 60, play_mode = 3, 
+            quality = 5, amp = 0, pan = 0, detune_cents = 0,
+            start_frame = 0, loop_start_frame = 0, end_frame = 2000000000, loop_end_frame = 2000000000,
             ---
             amp_env_attack = 0, amp_env_decay = 1, 
             amp_env_sustain = 1, amp_env_release = 0,
@@ -846,7 +859,6 @@ function init()
 
     engines.init()
     ui.init()
-    K3_hold = true
 end
 
 function enc(n,d)
@@ -928,9 +940,13 @@ function key(n,z)
     if view.sampling then
         sampling_actions[data.ui_index](z)
         if z == 1 and ((data.ui_index == 1 and engines.sc.rec) or data.ui_index == 4) then ui.waveform = {} end
-    else
-      if (data.ui_index == 1 or data.ui_index == 3 or data.ui_index == 4) and z == 1 then
+    elseif not view.steps_midi then
+      if data.ui_index == 1 then 
         open_sample_settings()
+      elseif (data.ui_index == 3 or data.ui_index == 4) and z == 1 then
+        if get_params(data.selected[1]).end_frame == 2000000000 then
+          open_sample_settings()
+        end
       elseif (data.ui_index == 17 or data.ui_index == 18) and z == 1 then
         change_filter_type()
       elseif lfo_1[data.ui_index] then
@@ -974,7 +990,7 @@ function redraw()
       -- length hack
   
       local maxl = params:lookup_param("end_frame_" .. data[data.pattern][tr].params[is_lock()].sample).controlspec.maxval 
-      if params_data.end_frame == 99999999 and engines.get_meta(params_data.sample).waveform[2] ~= nil then
+      if params_data.end_frame == 2000000000 and engines.get_meta(params_data.sample).waveform[2] ~= nil then
         get_sample_len(tr, is_lock())
       elseif params_data.end_frame > maxl then
         get_sample_len(tr, is_lock())
