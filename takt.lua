@@ -4,7 +4,8 @@
 -- parameter locking sequencer
 --
 
-local engines = include('lib/engines')
+local sampler = include('lib/sampler')
+local timber = include('lib/timber_takt')
 local ui = include('lib/ui')
 local linn = include('lib/linn')
 local beatclock = require 'beatclock'
@@ -32,7 +33,7 @@ local view = { steps_engine = true, steps_midi = false, notes_input = false, sam
 local choke = { 1, 2, 3, 4, 5, 6, 7, {},{},{},{},{},{},{}, ['8rt'] = {},['9rt'] = {},['10rt'] = {},['11rt'] = {}, ['12rt'] = {}, ['13rt'] = {},['14rt'] = {} }
 local dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 2, [6] = 1.5, [7] = 1,} 
 local midi_dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 1, [6] = 0.666, [7] = 0.545,} 
-local sampling_actions = {[-1] = function()end,[0]=function()end, [1] = engines.rec, [2] = engines.play, [3] = engines.save_and_load, [4] = engines.clear, [5] = engines.play, [6] = engines.play }
+local sampling_actions = {[-1] = function()end,[0]=function()end, [1] = sampler.rec, [2] = sampler.play, [3] = sampler.save_and_load, [4] = sampler.clear, [5] = sampler.play, [6] = sampler.play }
 local lfo_1, lfo_2 = {[5] = true, [13] = true,  }, {[6] = true, [14] = true,  }
 
 local param_ids = { 
@@ -84,7 +85,9 @@ local rules = {
 }
 
 --- utils, load/save
-
+local function K3_state()
+  return K3_hold
+end
 local function reset_positions()
   for i = 1, 14 do
     data[data.pattern].track.pos[i] = 0
@@ -164,11 +167,11 @@ end
 
 local function set_view(x)
   data.ui_index = 1
-  if not engines.sc.rec then
+  --if not sampler.rec then
     for k, v in pairs(view) do
       view[k] = k == x and true or false
     end
-  end
+  --end
 end
 
 --- steps
@@ -606,7 +609,7 @@ local step_params = {
       data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 1, 99)
   end, 
   [2] = function(tr, s, d) -- note
-      if K3_hold then 
+      if K3_state() then 
         data[data.pattern][tr].params[s].detune_cents = util.clamp(data[data.pattern][tr].params[s].detune_cents + d, -100, 100)
       else
         data[data.pattern][tr].params[s].note = util.clamp(data[data.pattern][tr].params[s].note + d, 25, 127)
@@ -684,11 +687,11 @@ local step_params = {
 }
 
 local sampling_params = {
-  [-1] = function(d)engines.sc.mode = util.clamp(engines.sc.mode + d, 1, 4) engines.set_mode() end,
-  [0] = function(d) engines.sc.source = util.clamp(engines.sc.source + d, 1, 2) engines.set_source() end,
-  [3] = function(d) engines.sc.slot = util.clamp(engines.sc.slot + d, 1, 100) end,
-  [5] = function(d) engines.sc.start = util.clamp(engines.sc.start + d / (20), 0, engines.sc.length) engines.set_start(engines.sc.start) end,
-  [6] = function(d) engines.sc.length = util.clamp(engines.sc.length + d / (20), engines.sc.start, engines.sc.rec_length) end,
+  [-1] = function(d)sampler.mode = util.clamp(sampler.mode + d, 1, 4) sampler.set_mode() end,
+  [0] = function(d) sampler.source = util.clamp(sampler.source + d, 1, 2) sampler.set_source() end,
+  [3] = function(d) sampler.slot = util.clamp(sampler.slot + d, 1, 100) end,
+  [5] = function(d) sampler.start = util.clamp(sampler.start + d / (20), 0, sampler.length) sampler.set_start(sampler.start) end,
+  [6] = function(d) sampler.length = util.clamp(sampler.length + d / (20), sampler.start, sampler.rec_length) end,
   [4] = function(d) end, --play
   [1] = function(d) end, --save
   [2] = function(d) end, --clear
@@ -846,6 +849,11 @@ function init()
     redraw_params[1] = data[1][1].params[tostring(1)]
     redraw_params[2] = data[1][1].params[tostring(1)]
 
+    timber.init()
+    sampler.init()
+    ui.init()
+
+
     sequencer_metro = metro.init()
     sequencer_metro.time = 60 / (data[data.pattern].bpm * 2) / 16 --[[ppqn]] / 4 
     sequencer_metro.event = function(stage) seqrun(stage) if stage % 2 == 0 then metaseq(stage) end end
@@ -856,9 +864,6 @@ function init()
     midi_clock.on_step = function() end
     midi_clock:bpm_change( util.round(data[data.pattern].bpm / midi_dividers[util.clamp(data[data.pattern].sync_div, 1, 7)]))
     midi_clock.send = false
-
-    engines.init()
-    ui.init()
 end
 
 function enc(n,d)
@@ -887,7 +892,7 @@ function enc(n,d)
         data.ui_index = util.clamp(data.ui_index + d, -6, -2)
       end
     else
-      if not engines.sc.rec then
+      if not sampler.rec then
         data.ui_index = util.clamp(data.ui_index + d, -1, 6)      
       end
     end
@@ -939,7 +944,7 @@ function key(n,z)
   elseif n == 3 then
     if view.sampling then
         sampling_actions[data.ui_index](z)
-        if z == 1 and ((data.ui_index == 1 and engines.sc.rec) or data.ui_index == 4) then ui.waveform = {} end
+        if z == 1 and ((data.ui_index == 1 and sampler.rec) or data.ui_index == 4) then ui.waveform = {} end
     elseif not view.steps_midi then
       if data.ui_index == 1 then 
         open_sample_settings()
@@ -981,16 +986,16 @@ function redraw()
   ui.head(redraw_params[1], data, view, K1_hold, rules, PATTERN_REC)
   
   if view.sampling then 
-    local pos = engines.get_pos()
-    ui.sampling(engines.sc, data.ui_index, pos)
+    local pos = sampler.get_pos()
+    ui.sampling(sampler, data.ui_index, pos)
 
   else
     if data.selected[1] < 8 then
-      local meta = engines.get_meta(params_data.sample)
+      local meta = timber.get_meta(params_data.sample)
       -- length hack
   
       local maxl = params:lookup_param("end_frame_" .. data[data.pattern][tr].params[is_lock()].sample).controlspec.maxval 
-      if params_data.end_frame == 2000000000 and engines.get_meta(params_data.sample).waveform[2] ~= nil then
+      if params_data.end_frame == 2000000000 and meta.waveform[2] ~= nil then
         get_sample_len(tr, is_lock())
       elseif params_data.end_frame > maxl then
         get_sample_len(tr, is_lock())

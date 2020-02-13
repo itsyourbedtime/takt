@@ -729,7 +729,7 @@ function ui.draw_save_icon(x, y, index, ui_index, slot)
 end
 
 
-function ui.sampling(sampling, ui_index, pos) 
+function ui.sampling(sampler, ui_index, pos) 
   local modes = {'ST', 'L+R', 'L', 'R'}
   local sources = {'EXT', 'INT' } 
   -- vus[sampling.mode][sampling.source]
@@ -738,30 +738,30 @@ function ui.sampling(sampling, ui_index, pos)
                  {{ui.in_l},{ui.out_l}},
                  {{ui.in_r},{ui.out_r}},
   }
-                  
-  local src = sources[sampling.source]
-  local mode = modes[sampling.mode] 
-  local rec = sampling.rec and 'ON' or 'OFF'
-  local play = sampling.play and 'ON' or 'OFF'
+  local src = sources[sampler.source]
+  local mode = modes[sampler.mode] 
+  --local pos = sampler.pos
+  local rec = sampler.rec 
+  local play = sampler.play 
 
-  local len = sampling.length
+  local len = sampler.length
   
   set_brightness(-1, ui_index)
   
   screen.rect(tile_x(0), 8,  20, 17)
   screen.fill()
   screen.level(0) 
-  if sampling.mode == 1 then
+  if sampler.mode == 1 then
       screen.rect(5,11,13, 2)
       screen.rect(5,13,13, 2)
       screen.stroke()
       screen.level(0)
-      screen.rect(5, 11, vus[sampling.mode][sampling.source][1], 1)
-      screen.rect(5, 13, vus[sampling.mode][sampling.source][2], 1)
+      screen.rect(5, 11, vus[sampler.mode][sampler.source][1], 1)
+      screen.rect(5, 13, vus[sampler.mode][sampler.source][2], 1)
   else
       screen.rect(5,11,13, 4)
       screen.stroke()
-      screen.rect(5, 11, vus[sampling.mode][sampling.source][1], 4)
+      screen.rect(5, 11, vus[sampler.mode][sampler.source][1], 4)
       screen.fill()
   end
   
@@ -781,15 +781,15 @@ function ui.sampling(sampling, ui_index, pos)
 
 
   set_brightness(1, ui_index)
-  if sampling.rec then screen.level(15) end
+  if rec  then screen.level(15) end
   screen.rect( tile_x(2) , 8,  20, 17)
   screen.fill()
   
 
   screen.level(0) 
-  
   screen.circle( tile_x(2)  + 10, 8 + 9, 4.5)
-  if sampling.rec then
+  
+  if rec then
     screen.circle( tile_x(2)  + 10, 8 + 9, 5)
     screen.fill() 
   else 
@@ -806,7 +806,7 @@ function ui.sampling(sampling, ui_index, pos)
   screen.line(tile_x(3) + 7 + 8, 8 + 5 + (8 * 0.5))
   screen.line(tile_x(3) + 7, 8 + 13)
   screen.close()
-  if sampling.play then screen.fill() 
+  if rec then screen.fill() 
   else screen.stroke() end
 
   screen.line_width(1)
@@ -816,7 +816,7 @@ function ui.sampling(sampling, ui_index, pos)
   screen.level(0) 
   
   
-  ui.draw_save_icon(tile_x(4), 8, 3, ui_index, sampling.slot)
+  ui.draw_save_icon(tile_x(4), 8, 3, ui_index, sampler.slot)
   
   set_brightness(4, ui_index)
   screen.rect( tile_x(5) , 8,  20, 17)
@@ -846,9 +846,9 @@ function ui.sampling(sampling, ui_index, pos)
   screen.stroke()
  
 
-  if sampling.rec then
+  if rec then
     local p = math.floor(pos * 10)
-    ui.waveform[p] = sampling.source == 1 and { ui.in_l, ui.in_r } or { ui.out_l, ui.out_r }
+    ui.waveform[p] = sampler.source == 1 and { ui.in_l, ui.in_r } or { ui.out_l, ui.out_r }
   end
   
   screen.level(1)
@@ -856,8 +856,8 @@ function ui.sampling(sampling, ui_index, pos)
 
   for k,v in pairs(ui.waveform) do
 
-    local l = sampling.mode == 1 and 1 or sampling.mode == 4 and 2 or 1
-    local r = sampling.mode == 1 and 2 or sampling.mode == 3 and 1 or 2 
+    local l = sampler.mode == 1 and 1 or sampler.mode == 4 and 2 or 1
+    local r = sampler.mode == 1 and 2 or sampler.mode == 3 and 1 or 2 
 
     screen.move(3 + wpos(k) , 44)
     screen.line(3 + wpos(k) , 43 - util.clamp((ui.waveform[k][l]),0, 15))
@@ -868,23 +868,23 @@ function ui.sampling(sampling, ui_index, pos)
     screen.stroke()
   end
 
-  if sampling.play then
+  if play then
     screen.level(2)
-    local pos_ = util.linlin(0,sampling.rec_length, 3, 123, pos)
+    local pos_ = util.linlin(0,sampler.rec_length, 3, 123, pos)
     screen.move( pos_, 60)
     screen.line( pos_, 27)
     screen.stroke()
   end
   
   set_brightness(5, ui_index)
-  local start_ = util.linlin( 0,sampling.rec_length, 0, 122, sampling.start)
+  local start_ = util.linlin( 0,sampler.rec_length, 0, 122, sampler.start)
   screen.move(3 + start_, 60)
   screen.line(3 + start_, 27)
   
   screen.stroke()
 
   set_brightness(6, ui_index)
-  local end_ = util.linlin(0, sampling.rec_length, 0, 122, sampling.length)
+  local end_ = util.linlin(0, sampler.rec_length, 0, 122, sampler.length)
   screen.move( 3 + end_, 60)
   screen.line( 3 + end_, 27)
   
