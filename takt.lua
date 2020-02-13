@@ -1,4 +1,4 @@
--- takt v2
+-- takt v2.1
 -- @its_your_bedtime
 --
 -- parameter locking sequencer
@@ -20,6 +20,8 @@ local hold_time, down_time, blink = 0, 0, 1
 local ALT, SHIFT, MOD, PATTERN_REC, K1_hold, K3_hold, ptn_copy, ptn_change_pending = false, false, false, false, false, false, false, false
 local redraw_params, hold, holdmax, first, second = {}, {}, {}, {}, {}
 local copy = { false, false }
+local freq_map = controlspec.WIDEFREQ
+
 --
 local g = grid.connect()
 local data = { pattern = 1, ui_index = 1, selected = { 1, false },  metaseq = { from = 1, to = 1 } }
@@ -157,10 +159,12 @@ end
 -- views
 
 local function set_view(x)
-    data.ui_index = 1 
+  data.ui_index = 1
+  if not engines.sc.rec then
     for k, v in pairs(view) do
       view[k] = k == x and true or false
     end
+  end
 end
 
 --- steps
@@ -593,7 +597,6 @@ local midi_step_params = {
   end,
 
 }
-
 local step_params = {
   [1] = function(tr, s, d) -- sample
       data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 1, 99)
@@ -637,28 +640,32 @@ local step_params = {
   [12] = function(tr, s, d) -- rel
       data[data.pattern][tr].params[s].amp_env_release = util.clamp(data[data.pattern][tr].params[s].amp_env_release + d / 10, 0, 10)
   end,
-  [13] = function(tr, s, d) -- amp mod lfo 1
+  [13] = function(tr, s, d)
         data[data.pattern][tr].params[s].amp_mod_lfo_1 = util.clamp(data[data.pattern][tr].params[s].amp_mod_lfo_1 + d / 100, 0, 1)
   end,
-  [14] = function(tr, s, d) -- amp mod lfo 2
+  [14] = function(tr, s, d) 
         data[data.pattern][tr].params[s].filter_freq_mod_lfo_2 = util.clamp(data[data.pattern][tr].params[s].filter_freq_mod_lfo_2 + d / 100, 0, 1)
   end,
-  [15] = function(tr, s, d) -- sample rate
+  [15] = function(tr, s, d) 
       data[data.pattern][tr].params[s].quality = util.clamp(data[data.pattern][tr].params[s].quality + d, 1, 5)
   end,
-  [16] = function(tr, s, d) -- mode
+  [16] = function(tr, s, d) 
       data[data.pattern][tr].params[s].play_mode = util.clamp(data[data.pattern][tr].params[s].play_mode + d, 1, 4)
   end,
-  [17] = function(tr, s, d) -- sample
-      data[data.pattern][tr].params[s].filter_freq = util.clamp(data[data.pattern][tr].params[s].filter_freq + (d * 200), 0, 20000)
+  [17] = function(tr, s, d) 
+      local fr = freq_map:unmap(data[data.pattern][tr].params[s].filter_freq)
+      fr = util.clamp(fr + d / 200,0.1,1)
+      
+      data[data.pattern][tr].params[s].filter_freq = freq_map:map(fr)
+      --util.clamp(data[data.pattern][tr].params[s].filter_freq + (d * 100), 0, 20000)
   end,
-  [18] = function(tr, s, d) -- sample
-      data[data.pattern][tr].params[s].filter_resonance = util.clamp(data[data.pattern][tr].params[s].filter_resonance + d / 10, 0, 1)
+  [18] = function(tr, s, d) 
+      data[data.pattern][tr].params[s].filter_resonance = util.clamp(data[data.pattern][tr].params[s].filter_resonance + d / 20, 0, 1)
   end,
-  [19] = function(tr, s, d) -- filter cutoff mod lfo 1
+  [19] = function(tr, s, d)
       data[data.pattern][tr].params[s].delay_send = util.clamp(data[data.pattern][tr].params[s].delay_send + d / 2, -40, 0)
   end,
-  [20] = function(tr, s, d) -- filter cutoff mod lfo 2
+  [20] = function(tr, s, d) 
         data[data.pattern][tr].params[s].reverb_send = util.clamp(data[data.pattern][tr].params[s].reverb_send + d / 2, -40, 0)
   end,
   
@@ -716,8 +723,8 @@ local controls = {
   [5] = function(z)  if z == 1 then if not view.notes_input then set_view('steps_engine') PATTERN_REC = false end tr_change(1)  end end,
   [6] = function(z)  if z == 1 then  if not view.notes_input then set_view('steps_midi') PATTERN_REC = false end tr_change(8)  end end,
   [8] = function(z)  if z == 1 then set_view(view.notes_input and (data.selected[1] < 8 and 'steps_engine' or 'steps_midi') or 'notes_input') end end,
-  [10] = function(z) if z == 1 then set_view(view.sampling and 'steps_engine' or 'sampling') data.selected[1] = 1 end  end,
-  [11] = function(z) if z == 1 then set_view(view.patterns and 'steps_engine' or 'patterns') data.selected[1] = 1 end end,
+  [10] = function(z) if z == 1 then set_view(view.sampling and (data.selected[1] < 8 and 'steps_engine' or 'steps_midi') or 'sampling') end  end,
+  [11] = function(z) if z == 1 then set_view(view.patterns and (data.selected[1] < 8 and 'steps_engine' or 'steps_midi') or 'patterns') end end,
   [13] = function(z) MOD = z == 1 and true or false if z == 0 then copy = { false, false } end end,
   [15] = function(z) ALT = z == 1 and true or false end,
   [16] = function(z) SHIFT = z == 1 and true or false end,

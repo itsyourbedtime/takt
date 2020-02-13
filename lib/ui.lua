@@ -226,6 +226,8 @@ function ui.draw_env(x, y, t, params_data, ui_index)
   
 end
 
+local filter = controlspec.WIDEFREQ
+
 function ui.draw_filter(x, y, params_data, ui_index)
 
     screen.level(2)
@@ -233,36 +235,44 @@ function ui.draw_filter(x, y, params_data, ui_index)
     screen.stroke()
 
     local sample = params_data.sample
-    local cut = util.linlin(0,20000,1,17, params_data.filter_freq )--/ 1200
-    local res = params_data.filter_resonance
+    local cut_m = filter:unmap(params_data.filter_freq)
+    local cut = util.linexp(0,1,1,34, cut_m )--/ 1200
+    local res = util.linlin(0,1,0,5, params_data.filter_resonance)
 
 
     screen.level(1)
-    if params_data.filter_type == 1 then
-        local t = x + cut * 2
+
+    if params_data.filter_type == 1  then
+        local t = x + cut 
         screen.level(ui_index == 17 and 15 or 1)
         screen.move(x - 1, y - 9)
-        screen.line(t + 2, y - 9 - (res * 5))
+        screen.curve (t, y - 9, t, y - 9 - (res / 2), t + 1, y - 9 - res)
         screen.stroke()
         screen.level(ui_index == 18 and 15 or 1)
-        screen.move(t + 2, y - 9 - (res * 5))
+        screen.move(t + 1, y - 9 - res )
         screen.line(t + 4, y)
         screen.stroke()
         
 
   elseif params_data.filter_type == 2 then
-        cut =  17 - cut
-        local t = x + cut * 2
+        cut = 34 - cut 
+        local t = x + cut
         screen.level( ui_index == 18 and 15 or 1)
         screen.move(t - 1, y)
-        screen.line(t + 1 , y - 9 - (res * 5))
+        screen.line(t , y - 9 - res)
         screen.stroke()
-        screen.move(t  + 1 , y - 9 - (res * 5))
+
+        screen.move(x + 38 , y - 9)
         screen.level(ui_index == 17 and 15 or 1)
-        screen.line(t  + (38 - (cut * 2)), y - 9)
+        screen.curve (t, y - 9, t, y - 9 - (res / 2), t, y - 9 - res)
+
         screen.stroke()
+        screen.close()
+        
+        
+
   end
-    
+  
 end
 
 function ui.draw_mode(x, y, mode, index, lock)
@@ -376,11 +386,11 @@ function ui.draw_note(x, y, params_data, index, ui_index, lock)
   screen.fill()
 
   screen.level(0)
-  screen.rect(x + 6, y + 6, 3, 2)
-  screen.rect(x + 7, y + 6, 3, 1)
-  screen.rect(x + 9, y +2, 1, 4)
-  screen.rect(x + 10, y + 3, 1, 1)
-  screen.rect(x + 11, y + 4, 1, 1)
+  screen.rect(x + 7, y + 6, 3, 2)
+  screen.rect(x + 8, y + 6, 3, 1)
+  screen.rect(x + 10, y +2, 1, 4)
+  screen.rect(x + 11, y + 3, 1, 1)
+  screen.rect(x + 12, y + 4, 1, 1)
   screen.fill()
   
   local note_name = params_data.note

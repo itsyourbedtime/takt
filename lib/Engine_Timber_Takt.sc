@@ -1502,6 +1502,8 @@ Engine_Timber_Takt : CroneEngine {
 		players.free;
 		voiceGroup.free;
 		lfos.free;
+		fxBus.free;
+	  reverbBus.free;
 		reverb.free;
 		delay.free;
 		mixer.free;
