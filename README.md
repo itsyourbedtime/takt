@@ -1,1 +1,1 @@
-![docs](lib/docs.png)
+![docs](lib/doc.png)
