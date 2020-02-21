@@ -1,11 +1,13 @@
--- takt v2.1
+-- takt v2.2
 -- @its_your_bedtime
 --
 -- parameter locking sequencer
 --
 
 local sampler = include('lib/sampler')
+local browser = include('lib/browser')
 local timber = include('lib/timber_takt')
+local takt_utils = include('lib/_utils')
 local ui = include('lib/ui')
 local linn = include('lib/linn')
 local beatclock = require 'beatclock'
@@ -24,17 +26,22 @@ local copy = { false, false }
 local freq_map = controlspec.WIDEFREQ
 local amp_map = controlspec.DB
       amp_map.maxval = 16
-local send_map = controlspec.DB
+local send_map = controlspec.new(-48, 0, 'db', 0, -48, "dB")--.DB
+local sidechain_map = controlspec.new(-99, 0, 'db', 0, -99, "dB")--.DB
+local threshold_map  = controlspec.new(0.01, 1, "exp", 0.001, 0.1, "")
+local time_map = controlspec.new(0.0001, 5, 'exp', 0, 0.1, 's')
 
 --
 local g = grid.connect()
-local data = { pattern = 1, ui_index = 1, selected = { 1, false },  metaseq = { from = 1, to = 1 } }
+local data = { pattern = 1, ui_index = 1, selected = { 1, false },  metaseq = { from = 1, to = 1, div = 1}, [1] = takt_utils.make_default_pattern() }
 local view = { steps_engine = true, steps_midi = false, notes_input = false, sampling = false, patterns = false } 
 local choke = { 1, 2, 3, 4, 5, 6, 7, {},{},{},{},{},{},{}, ['8rt'] = {},['9rt'] = {},['10rt'] = {},['11rt'] = {}, ['12rt'] = {}, ['13rt'] = {},['14rt'] = {} }
 local dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 2, [6] = 1.5, [7] = 1,} 
 local midi_dividers  = { [1] = 16, [2] = 8, [3] = 4, [4] = 3, [5] = 1, [6] = 0.666, [7] = 0.545,} 
 local sampling_actions = {[-1] = function()end,[0]=function()end, [1] = sampler.rec, [2] = sampler.play, [3] = sampler.save_and_load, [4] = sampler.clear, [5] = sampler.play, [6] = sampler.play }
 local lfo_1, lfo_2 = {[5] = true, [13] = true,  }, {[6] = true, [14] = true,  }
+local last_index = 1
+
 
 local param_ids = { 
   ['quality'] = "quality", ['start_frame'] = "start_frame", ['end_frame'] = "end_frame", ['loop_start_frame'] = "loop_start_frame", ['loop_end_frame'] = "loop_end_frame", 
@@ -42,7 +49,7 @@ local param_ids = {
   ['freq_mod_lfo_2'] = "freq_mod_lfo_2", ['filter_type'] = "filter_type", ['filter_freq'] = "filter_freq", ['filter_resonance'] = "filter_resonance", 
   ['filter_freq_mod_lfo_1'] = "filter_freq_mod_lfo_1", ['filter_freq_mod_lfo_2'] = "filter_freq_mod_lfo_2", ['pan'] = "pan", ['amp'] = "amp", 
   ['amp_mod_lfo_1'] = "amp_mod_lfo_1", ['amp_mod_lfo_2'] = "amp_mod_lfo_2", ['amp_env_attack'] = "amp_env_attack", ['amp_env_decay'] = "amp_env_decay", 
-  ['amp_env_sustain'] = "amp_env_sustain", ['amp_env_release'] = "amp_env_release", ['reverb_send'] = "reverb_send", ["delay_send"] = 'delay_send'
+  ['amp_env_sustain'] = "amp_env_sustain", ['amp_env_release'] = "amp_env_release", ['reverb_send'] = "reverb_send", ["delay_send"] = 'delay_send', ['sidechain_send'] = 'sidechain_send'
   
 }
 
@@ -85,13 +92,57 @@ local rules = {
 }
 
 --- utils, load/save
-local function K3_state()
+
+local function to_id(x, y)
+  return  x + ((y - 1) * 16) 
+end
+
+local function pattern_exists(x, y)
+  return  data[x + ((y - 1) * 16)] ~= nil and true or false
+end
+
+local function id_to_x(id)
+  return (id - 1) % 16 + 1
+end
+
+local function id_to_y(id)
+  return math.ceil(id / 16)
+end
+
+local function K3_is_hold()
   return K3_hold
 end
+
+local function K1_is_hold()
+  return K1_hold
+end
+
+local function set_enc_res(fine, coarse)
+  return K3_is_hold() and coarse or fine  
+end
+
 local function reset_positions()
   for i = 1, 14 do
     data[data.pattern].track.pos[i] = 0
   end
+end
+
+local prev_mix_val = -1
+local prev_level_val = 0
+
+local function comp_shut(state)
+    if state then
+        print('run')
+        params:set('comp_mix', prev_mix_val)
+        params:set('comp_level', prev_level_val)
+    elseif not state then 
+        print('stop')
+        prev_mix_val = params:get('comp_mix')
+        prev_level_val = params:get('comp_level')
+        params:set('comp_mix', -1)
+        params:set('comp_level', -99)
+    end
+
 end
 
 local function deepcopy(orig)
@@ -115,35 +166,36 @@ local function load_project(pth)
   midi_clock:stop()
   engine.noteOffAll()
   redraw_metro:stop()
+  comp_shut(sequencer_metro.is_running)
 
   if string.find(pth, '.tkt') ~= nil then
     local saved = tab.load(pth)
     if saved ~= nil then
       print("data found")
       for k,v in pairs(saved[2]) do 
-        data[k] = v 
+        data[k] = v
       end
-      
-      for t = 1, 16 do
-        for l = 1, 7 do
-          for k = 1, 256 do
+      -- re-init metatables
+      for t = 1, #data do 
+          for l = 1, 7 do
+            for k = 1, 256 do
             data[t][l].params[k] = saved[2][t][l].params[k]
-           setmetatable(data[t][l].params[k], {__index =  data[t][l].params[tostring(l)]})
+            setmetatable(data[t][l].params[k], {__index =  data[t][l].params[tostring(l)]})
+            end
+          end
+          
+          for l = 8, 14 do
+            for k = 1, 256 do
+              data[t][l].params[k] = saved[2][t][l].params[k]
+            setmetatable(data[t][l].params[k], {__index =  data[t][l].params[tostring(l)]})
+            end
           end
         end
-        
-        for l = 8, 14 do
-          for k = 1, 256 do
-            data[t][l].params[k] = saved[2][t][l].params[k]
-           setmetatable(data[t][l].params[k], {__index =  data[t][l].params[tostring(l)]})
-          end
-        end
-      end
-      
-      if saved[1] then params:read(norns.state.data .. saved[1] .. ".pset") end
-      reset_positions()
+  
+        if saved[1] then params:read(norns.state.data .. saved[1] .. ".pset") end
+        reset_positions()
     else
-      print("no data")
+        print("no data")
     end
   end
   redraw_metro:start()
@@ -154,6 +206,7 @@ local function save_project(txt)
   midi_clock:stop()
   redraw_metro:stop()
   engine.noteOffAll()
+  comp_shut(sequencer_metro.is_running)
   if txt then
     tab.save({ txt, data }, norns.state.data .. txt ..".tkt")
     params:write( norns.state.data .. txt .. ".pset")
@@ -166,12 +219,16 @@ end
 -- views
 
 local function set_view(x)
-  data.ui_index = 1
-  --if not sampler.rec then
+  if not sampler.rec then
     for k, v in pairs(view) do
       view[k] = k == x and true or false
     end
-  --end
+  end
+  if view.sampling or view.patterns then last_index = data.ui_index data.ui_index = 1  
+  else
+    data.ui_index = last_index
+  end
+
 end
 
 --- steps
@@ -288,6 +345,14 @@ local function tr_change(tr)
   redraw_params[2] = redraw_params[1]
 end
 
+local function get_sample()
+  return data[data.pattern][data.selected[1]].params[is_lock()].sample
+end
+
+local function sample_not_loaded(n)
+  return params:get('sample_' .. n) == '-' 
+end
+
 local function sync_tracks(tr)
     for i=1, 14 do
       if data[data.pattern].track.div[i] == data[data.pattern].track.div[tr] then
@@ -360,9 +425,11 @@ end
 local function open_sample_settings()
     local p = is_lock()
     norns.menu.toggle(true)
+    norns.encoders.set_sens(2,1)
     _norns.enc(1, 1000)
     _norns.enc(2,-9999999)
-    _norns.enc(2, 56 +(( data[data.pattern][data.selected[1]].params[p].sample - 1 ) * 98 ))
+    _norns.enc(2, 36 +(( data[data.pattern][data.selected[1]].params[p].sample - 1 ) * 51 ))
+    norns.encoders.set_sens(2,4)
 end
 
  function open_settings(i)
@@ -375,6 +442,7 @@ end
 local function change_filter_type()
     local tr = data.selected[1]
     local p = is_lock()
+    p = type(p) == 'string' and p or get_step(p)
     data[data.pattern][tr].params[p].filter_type =  data[data.pattern][tr].params[p].filter_type
     data[data.pattern][tr].params[p].filter_type = (data[data.pattern][tr].params[p].filter_type % 2 ) + 1
 end
@@ -404,18 +472,26 @@ local function notes_off_midi()
 end
 
 -- seq
+local m_div = function(div) return  div == 1 and 2 or div^2 end
 
-local function metaseq(counter)
+local function change_pattern(pt)
+  if data[pt] == nil then
+    data[pt] = takt_utils.make_default_pattern()
+  end
+    data.pattern = pt
+end
+
+local function metaseq(stage)
     if data[data.pattern].track.pos[1] == data[data.pattern].track.len[1] - 1 then
       
         if ptn_change_pending then
-          data.pattern = ptn_change_pending
+          change_pattern(ptn_change_pending)
           ptn_change_pending = false
         end
         
       if (data.metaseq.to and data.metaseq.from) then
-        data.pattern = data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from
-        set_bpm(data[data.pattern].bpm)
+          change_pattern(data.pattern < data.metaseq.to and data.pattern + 1 or data.metaseq.from)
+          set_bpm(data[data.pattern].bpm)
       end
     end
 end
@@ -514,11 +590,13 @@ local function midi_event(d)
   end
 
 end
+
 ---
 
 local track_params = {
   [-6] = function(tr, s, d) -- ptn
-      data.pattern = (util.clamp(data.pattern + d, 1, 16))
+      local pt = (util.clamp(data.pattern + d, 1, 16))
+      change_pattern(pt)
       data.metaseq.from = false --data.pattern
       data.metaseq.to = false --data.pattern
   end,
@@ -539,11 +617,15 @@ local track_params = {
       
   end,
   [-2] = function(tr, s, d) -- midi out bpm scale
-      data[data.pattern].sync_div = util.clamp(data[data.pattern].sync_div + d, 0, 7)
-      if data[data.pattern].sync_div == 0 then midi_clock.send = false else midi_clock.send = true end
-  end,
+    data[data.pattern].sync_div = util.clamp(data[data.pattern].sync_div + d, 0, 7)
+    if data[data.pattern].sync_div == 0 then midi_clock.send = false else midi_clock.send = true end
+end,
+[-1] = function(tr, s, d) -- midi out bpm scale
+     data[data.pattern][tr].params[tostring(tr)].sidechain_send = util.clamp(data[data.pattern][tr].params[tostring(tr)].sidechain_send + d, -99, 0 )
+end,
 }
- 
+
+
 local midi_step_params = {
 
   [1] = function(tr, s, d) -- note
@@ -604,12 +686,13 @@ local midi_step_params = {
   end,
 
 }
+
 local step_params = {
   [1] = function(tr, s, d) -- sample
       data[data.pattern][tr].params[s].sample = util.clamp(data[data.pattern][tr].params[s].sample + d, 1, 99)
   end, 
   [2] = function(tr, s, d) -- note
-      if K3_state() then 
+      if K3_is_hold() then 
         data[data.pattern][tr].params[s].detune_cents = util.clamp(data[data.pattern][tr].params[s].detune_cents + d, -100, 100)
       else
         data[data.pattern][tr].params[s].note = util.clamp(data[data.pattern][tr].params[s].note + d, 25, 127)
@@ -618,14 +701,14 @@ local step_params = {
   [3] = function(tr, s, d) -- start
       local sample = data[data.pattern][tr].params[s].sample
       local pspec = params:lookup_param("start_frame_" .. sample).controlspec
-      local start = util.clamp(pspec:unmap( data[data.pattern][tr].params[s].start_frame ) + (d/200), 0, 1)
+      local start = util.clamp(pspec:unmap( data[data.pattern][tr].params[s].start_frame ) + (d / set_enc_res(200, 1000) ), 0, 1)
       data[data.pattern][tr].params[s].start_frame = pspec:map(start) 
       data[data.pattern][tr].params[s].lool_start_frame = pspec:map(start)
   end,
   [4] = function(tr, s, d) -- len
       local sample = data[data.pattern][tr].params[s].sample
       local pspec = params:lookup_param("end_frame_" .. sample).controlspec
-      local length = util.clamp(pspec:unmap( data[data.pattern][tr].params[s].end_frame ) + (d / 200), 0, 1)
+      local length = util.clamp(pspec:unmap( data[data.pattern][tr].params[s].end_frame ) + (d / set_enc_res(200, 1000)), 0, 1)
       data[data.pattern][tr].params[s].end_frame = pspec:map(length)  
       data[data.pattern][tr].params[s].loop_end_frame = pspec:map(length)
    end,
@@ -652,7 +735,7 @@ local step_params = {
       data[data.pattern][tr].params[s].amp_env_decay = util.clamp(data[data.pattern][tr].params[s].amp_env_decay + d / 50, 0.01, 5)
   end,
   [11] = function(tr, s, d) -- sus
-      data[data.pattern][tr].params[s].amp_env_sustain = util.clamp(data[data.pattern][tr].params[s].amp_env_sustain + d / 10, 0, 1)
+      data[data.pattern][tr].params[s].amp_env_sustain = util.clamp(data[data.pattern][tr].params[s].amp_env_sustain + d / 50, 0, 1)
   end,
   [12] = function(tr, s, d) -- rel
       data[data.pattern][tr].params[s].amp_env_release = util.clamp(data[data.pattern][tr].params[s].amp_env_release + d / 10, 0, 10)
@@ -678,11 +761,10 @@ local step_params = {
       data[data.pattern][tr].params[s].filter_resonance = util.clamp(data[data.pattern][tr].params[s].filter_resonance + d / 20, 0, 1)
   end,
   [19] = function(tr, s, d)
-        data[data.pattern][tr].params[s].delay_send = util.clamp(data[data.pattern][tr].params[s].delay_send + d / 2, -40, 0)
+        data[data.pattern][tr].params[s].delay_send = send_map:map(util.clamp(send_map:unmap(data[data.pattern][tr].params[s].delay_send) + d / 200, 0,1 ))
   end,
   [20] = function(tr, s, d) 
-        data[data.pattern][tr].params[s].reverb_send = util.clamp(data[data.pattern][tr].params[s].reverb_send + d / 2, -40, 0)
-  end,
+        data[data.pattern][tr].params[s].reverb_send = send_map:map(util.clamp(send_map:unmap(data[data.pattern][tr].params[s].reverb_send) + d / 200, 0,1 ))  end,
   
 }
 
@@ -732,6 +814,7 @@ local controls = {
           reset_positions()
           kill_all_midi()
         end
+        comp_shut(sequencer_metro.is_running)
       end
     end,
   [3] = function(z)  if view.notes_input and z == 1 and sequencer_metro.is_running then PATTERN_REC = not PATTERN_REC end end,
@@ -745,6 +828,34 @@ local controls = {
   [16] = function(z) SHIFT = z == 1 and true or false end,
 }
 
+local params_fx = {
+  [1] = function(d) params:set('comp_level', params:get('comp_level') + d) end,
+  [2] = function(d) params:set('comp_mix', params:get('comp_mix') + d / 50) end,
+  [3] = function(d)
+    local val = threshold_map:unmap(params:get('comp_threshold'))
+    params:set('comp_threshold', threshold_map:map(util.clamp(val + d /200, 0.001, 1 ))) 
+  end, 
+  [4] = function(d) params:set('comp_slopebelow', params:get('comp_slopebelow') + d / 100) end,
+  [5] = function(d) params:set('comp_slopeabove', params:get('comp_slopeabove') + d / 100) end,
+  [6] = function(d) params:set('comp_clamptime', params:get('comp_clamptime') + d / 100)  end,
+  [7] = function(d) params:set('comp_relaxtime', params:get('comp_relaxtime') + d / 100) end,
+  [8] = function(d) params:set('reverb_time', params:get('reverb_time') + d / 5) end,
+  [9] = function(d) params:set('reverb_size', params:get('reverb_size') + d / 50) end,
+  [10] = function(d) params:set('reverb_damp', params:get('reverb_damp') + d / 100) end,
+  [11] = function(d) params:set('reverb_diff', params:get('reverb_diff') + d / 100) end,
+  [12] = function(d) params:set('delay_level', params:get('delay_level') + d) end,
+  [13] = function(d) 
+    local val = time_map:unmap(params:get('delay_time'))
+    params:set('delay_time', time_map:map(util.clamp(val + d /100, 0.001, 1 ))) 
+  end,
+  [14] = function(d) params:set('delay_feedback', params:get('delay_feedback') + d / 50) end,
+  [15] = function(d) params:set('lfo_1_freq', params:get('lfo_1_freq') + d / 10) end,
+  [16] = function(d) params:set('lfo_1_wave_shape', params:get('lfo_1_wave_shape') + d) end,
+  [17] = function(d) params:set('lfo_2_freq', params:get('lfo_2_freq') + d / 10) end,
+  [18] = function(d) params:set('lfo_2_wave_shape', params:get('lfo_2_wave_shape') + d) end,
+}
+
+  
 function init()
 
   for i = 1, 4 do
@@ -762,89 +873,14 @@ function init()
     params:set_action('new', function(x) init() end)
     params:add_separator()
 
-
-    for t = 1, 16 do
-      data[t] = { bpm = 120, sync_div = 0,
-        track = { 
-          mute = {}, 
-          pos = {},
-          start = {}, 
-          len = {},
-          div = {}, 
-          cycle = {}, 
-        },
-      }
       
-      for i = 1, 14 do
-        hold[i] = 0
-        holdmax[i] = 0
-        first[i] = 0
-        second[i] = 0
-        
-        data[t].track.mute[i] = false
-        data[t].track.pos[i] = 0
-        data[t].track.start[i] = 1
-        data[t].track.len[i] = 256
-        data[t].track.div[i] = 5
-        data[t].track.cycle[i] = 1
-      end
-      
-      
-      for l = 1, 7 do
-        local m = l + 7
-        
-        data[t][l] = {}
-        data[t][m] = {}
-        data[t][l].params = {}
-        data[t][m].params = {}
-        
-        data[t][l].params[tostring(l)] = {
-            ---
-            lock = 0, offset = 0, rule = 0, retrig = 0, div = 5, 
-            ---
-            sample = l, note = 60, play_mode = 3, 
-            quality = 5, amp = 0, pan = 0, detune_cents = 0,
-            start_frame = 0, loop_start_frame = 0, end_frame = 2000000000, loop_end_frame = 2000000000,
-            ---
-            amp_env_attack = 0, amp_env_decay = 1, 
-            amp_env_sustain = 1, amp_env_release = 0,
-            --
-            filter_type = 1, filter_freq = 20000, filter_resonance = 0,
-            --
-            freq_mod_lfo_1 = 0, freq_mod_lfo_2 = 0,
-            amp_mod_lfo_1 = 0, filter_freq_mod_lfo_2 = 0,
-            --
-            reverb_send = -40, delay_send = -40, 
-        }
-    
-        data[t][m].params[tostring(m)] = {
-            --
-            lock = 0, offset = 0, rule = 0, retrig = 0, div = 5,
-            ---
-            device = 1,  note = 74 - m, length = 1,
-            channel = 1, velocity = 100,  program_change = -1,
-            ---
-            cc_1 = 1, cc_1_val = -1, cc_2 = 2, cc_2_val = -1,
-            cc_3 = 3, cc_3_val = -1, cc_4 = 4, cc_4_val = -1,
-            cc_5 = 5, cc_5_val = -1, cc_6 = 6, cc_6_val = -1,
-            --
-        }
-
-        for i=0,256 do
-          data[t][l][i] = 0
-          data[t][m][i] = 0
-          
-          data[t][l].params[i] = {}
-          data[t][m].params[i] = {}
-          
-          setmetatable(data[t][l].params[i], {__index =  data[t][l].params[tostring(l)]})
-          setmetatable(data[t][m].params[i], {__index =  data[t][m].params[tostring(m)]})
-
-        end
-      end
-        
+    for i = 1, 14 do
+      hold[i] = 0
+      holdmax[i] = 0
+      first[i] = 0
+      second[i] = 0
     end
-    
+    hold['p'] = 0
     
     redraw_params[1] = data[1][1].params[tostring(1)]
     redraw_params[2] = data[1][1].params[tostring(1)]
@@ -853,12 +889,11 @@ function init()
     sampler.init()
     ui.init()
 
-
     sequencer_metro = metro.init()
     sequencer_metro.time = 60 / (data[data.pattern].bpm * 2) / 16 --[[ppqn]] / 4 
-    sequencer_metro.event = function(stage) seqrun(stage) if stage % 2 == 0 then metaseq(stage) end end
+    sequencer_metro.event = function(stage) seqrun(stage) if stage % m_div(data.metaseq.div) == 0 then metaseq(stage) end end
 
-    redraw_metro = metro.init(function(stage) redraw() g:redraw() blink = (blink + 1) % 17 end, 1/30)
+    redraw_metro = metro.init(function(stage) redraw(stage) g:redraw() blink = (blink + 1) % 17 end, 1/30)
     redraw_metro:start()
     midi_clock = beatclock:new()
     midi_clock.on_step = function() end
@@ -876,8 +911,9 @@ function enc(n,d)
 
   local tr = data.selected[1]
   local s = data.selected[2] and data.selected[2] or tostring(tr)
-  
-  if n == 1 then
+  if browser.open then
+    browser.enc(n, d)
+  elseif n == 1 then
       
       local offset = data.selected[1] > 7 and 7 or 0
       data.selected[1] = util.clamp(data.selected[1] + d, 1 + offset, 7 + offset)
@@ -886,10 +922,10 @@ function enc(n,d)
   elseif n == 2 then
     
     if not view.sampling then
-      if not K1_hold then 
-        data.ui_index = util.clamp(data.ui_index + d, not data.selected[2] and 1 or -3, view.steps_midi and 18 or 20)
+      if not K1_is_hold() then 
+        data.ui_index = util.clamp(data.ui_index + d, not data.selected[2] and 1 or -3, (view.steps_midi or view.patterns) and 18 or 20)
       else
-        data.ui_index = util.clamp(data.ui_index + d, -6, -2)
+        data.ui_index = util.clamp(data.ui_index + d, -6, -1)
       end
     else
       if not sampler.rec then
@@ -897,7 +933,9 @@ function enc(n,d)
       end
     end
   elseif n == 3 then
-    if not view.sampling then
+    if view.patterns then 
+        params_fx[data.ui_index](d)
+    elseif not view.sampling then
       
       local p = is_lock()
       local t = type(p) == 'number' and get_step(p) or p
@@ -907,7 +945,7 @@ function enc(n,d)
       redraw_params[1] = get_params(tr, is_lock())
       redraw_params[2] = redraw_params[1] 
 
-      if K1_hold then
+      if K1_is_hold() then
         track_params[data.ui_index](tr, p, d)
       else
         
@@ -932,42 +970,60 @@ function enc(n,d)
 end
 
 function key(n,z)
-  
-  K1_hold = (n == 1 and z == 1 and true) or false
-  K3_hold = (n == 3 and z == 1 and true) or false
-  if n == 1 then
-    if K1_hold and not view.sampling then 
+  K1_hold = (n == 1 and z == 1) and true or false
+  K3_hold = (n == 1 and z == 1) and true or false
+  if browser.open then
+    browser.key(n, z)
+
+  elseif n == 1 then
+    if K1_is_hold() and (not view.sampling and not view.patterns) then 
       data.ui_index = -4 
     else 
       data.ui_index = 1 
+    end
+  elseif n == 2 and z == 1 then
+    if view.patterns then
+      set_view(view.notes_input and (data.selected[1] < 8 and 'steps_engine' or 'steps_midi'))
+    elseif browser.open then
+      
+      browser.exit()
     end
   elseif n == 3 then
     if view.sampling then
         sampling_actions[data.ui_index](z)
         if z == 1 and ((data.ui_index == 1 and sampler.rec) or data.ui_index == 4) then ui.waveform = {} end
-    elseif not view.steps_midi then
-      if data.ui_index == 1 then 
-        open_sample_settings()
-      elseif (data.ui_index == 3 or data.ui_index == 4) and z == 1 then
-        if get_params(data.selected[1]).end_frame == 2000000000 then
-          open_sample_settings()
-        end
+    elseif view.patterns then 
+        --open_settings(2)
+        --open_settings(3.5)
+        --open_settings(5.5)
+      elseif not view.steps_midi then
+      if data.ui_index == 1 and z == 1  then 
+        --browser.open = true
+        local sample_id = data[data.pattern][data.selected[1]].params[is_lock()].sample
+        browser.enter(_path.audio, timber.load_sample, sample_id)
+        --open_sample_settings()
+      elseif (data.ui_index == 3 or data.ui_index == 4) and z == 1 and sample_not_loaded(get_sample()) then
+         open_sample_settings()
       elseif (data.ui_index == 17 or data.ui_index == 18) and z == 1 then
-        change_filter_type()
+          change_filter_type()
       elseif lfo_1[data.ui_index] then
-        open_settings(1)
+          set_view('patterns')
+          data.ui_index = 15
       elseif lfo_2[data.ui_index] then
-        open_settings(2)
+          set_view('patterns')
+          data.ui_index = 17
       elseif data.ui_index == 19 then
-        open_settings(3.5)
+          set_view('patterns')
+          data.ui_index = 12
       elseif data.ui_index == 20 then
-        open_settings(5.5)
+          set_view('patterns')
+          data.ui_index = 8
       end
     end
   end
 end
 
-function redraw()
+function redraw(stage)
 
   local tr = data.selected[1]
   local pos = data[data.pattern].track.pos[tr]
@@ -982,70 +1038,65 @@ function redraw()
   end
   
   screen.clear()
-  
-  ui.head(redraw_params[1], data, view, K1_hold, rules, PATTERN_REC)
+
+  ui.head(redraw_params[1], data, view, K1_is_hold(), rules, PATTERN_REC, browser.preview)
   
   if view.sampling then 
     local pos = sampler.get_pos()
     ui.sampling(sampler, data.ui_index, pos)
-
+  elseif view.patterns then 
+    ui.patterns(data.pattern, data.metaseq, data.ui_index, stage)
   else
     if data.selected[1] < 8 then
-      local meta = timber.get_meta(params_data.sample)
+      local meta = timber.get_meta(redraw_params[1].sample)
       -- length hack
-  
-      local maxl = params:lookup_param("end_frame_" .. data[data.pattern][tr].params[is_lock()].sample).controlspec.maxval 
+      local max_len = meta.num_frames
       if params_data.end_frame == 2000000000 and meta.waveform[2] ~= nil then
         get_sample_len(tr, is_lock())
-      elseif params_data.end_frame > maxl then
+      elseif params_data.end_frame > max_len then
         get_sample_len(tr, is_lock())
-      elseif params_data.start_frame > maxl then-- params:lookup_param("end_frame_" .. data[data.pattern][tr].params[is_lock()].sample).controlspec.maxval then
+      elseif params_data.start_frame > max_len then
         get_sample_start(tr, is_lock())
       end
-
-      ui.main_screen(redraw_params[1], data.ui_index, meta)
+      ui.main_screen(redraw_params[1], data.ui_index, meta, browser)
+      if browser.open then browser.redraw() end
     else
       ui.midi_screen(redraw_params[1], data.ui_index, data[data.pattern].track, data[data.pattern])
     end
   end
-  
   screen.update()
-
 end
+
 
 function g.key(x, y, z)
   screen.ping()
-  
   if view.notes_input and not ALT and not SHIFT then
-      local tr = data.selected[1]
-      local device = data[data.pattern][tr].params[tr].device
-      local note = linn.grid_key(x, y, z, device and midi_out_devices[device])
-      local pos = data[data.pattern].track.pos[tr]
-      
-      if note then 
-        if tr < 8 then
-          engine.noteOn(data.selected[1], music.note_num_to_freq(note), 1, data[data.pattern][data.selected[1]].params[tr].sample)
-        end
-        if sequencer_metro.is_running and PATTERN_REC then 
-            place_note(tr, pos, note )
-        end
-      end           
+    local tr = data.selected[1]
+    local device = data[data.pattern][tr].params[tr].device
+    local note = linn.grid_key(x, y, z, device and midi_out_devices[device])
+    local pos = data[data.pattern].track.pos[tr]
+    if note then 
+      if tr < 8 then
+        engine.noteOn(data.selected[1], music.note_num_to_freq(note), 1, data[data.pattern][data.selected[1]].params[tr].sample)
+      end
+      if sequencer_metro.is_running and PATTERN_REC then 
+        place_note(tr, pos, note )
+      end
+    end           
   end    
-
   if y < 8 then
     local held
     local cond = have_substeps(y, x) 
-
     if z==1 and hold[y] then
       holdmax[y] = 0
     end
     hold[y] = hold[y] + (z * 2 - 1)
+    hold['p'] = hold['p'] + (z * 2 - 1)
     if hold[y] > holdmax[y] then
       holdmax[y] = hold[y]
     end
     if not view.patterns then
       local y = data.selected[1] > 7 and y + 7 or y
-      
       if SHIFT then
         if z == 1 then
           if x == 16 then
@@ -1089,120 +1140,106 @@ function g.key(x, y, z)
           end
         end        
       end
-    
-      
     elseif view.patterns then
-      if y == 1 and z == 1 then
-        if MOD then 
-            
+      local id = to_id(x,y)
+      if y < 5 and z == 1 then
+        if SHIFT then
+          if data.pattern ~= id then
+            data[id] = nil
+          end
+        elseif MOD then 
             if not ptn_copy then 
-              ptn_copy = x
+              ptn_copy = id
             else
-              copy_pattern(ptn_copy, x)
+              copy_pattern(ptn_copy, id)
             end
-            
         else
-          
-          if hold[y] == 1 then
-            first[y] = x
+          if hold['p'] == 1 then
+            first['p'] = id
             if ptn_change_pending then
-                data.pattern = ptn_change_pending
+                change_pattern(ptn_change_pending)
                 ptn_change_pending = false
             else
-                ptn_change_pending = x
+                ptn_change_pending = id
             end
-
-            
             data.metaseq.from = false
             data.metaseq.to = false
             ptn_copy = false
-          elseif hold[y] == 2 then
-            second[y] = x
-
-            data.metaseq.from = first[y]
-            data.metaseq.to = second[y]
-            
+          elseif hold['p'] == 2 then
+            second['p'] = id
+            data.metaseq.from = first['p']
+            data.metaseq.to = second['p']
           end
         end
+      elseif y == 6 then
+        data.metaseq.div = x 
       end
     end
-  
   else
-    
     if controls[x] then
       controls[x](z)
     end
-    
     if z == 1 then
-      if view.sampling then
+      if view.sampling or view.patterns then
         ui.start_polls()
       else 
         ui.stop_polls()
       end
     end
-
   end
-  
 end
 
 function g.redraw()
   local glow = util.clamp(blink, 5, 15)
-  
   g:all(0)
-  
   if view.notes_input and (not ALT and not SHIFT) then 
       linn.grid_redraw(g)
   end
-  
   for y = 1, 7 do 
     for x = 1, 16 do 
       if not view.patterns then
         local yy = data.selected[1] > 7 and y + 7 or y 
-        if SHIFT then
-                        
+        if SHIFT then         
             if y < 8 and x < 8 then
               g:led(x, y, x == 5 and 6 or 3)
             end
-            
             g:led(data[data.pattern].track.div[yy], y, 15)
             g:led(16, y, data[data.pattern].track.mute[yy] and 15 or 6 )
-
         elseif ALT then
-          
             local t_start = get_tr_start(yy)
             local t_len  = get_tr_len(yy)
             if x >= t_start and x <= t_len then
               g:led(x, y, 3)
             end
-        
         elseif not SHIFT and not view.notes_input then
           -- main
           local substeps = have_substeps(yy, x)
-          
           if substeps then 
-            
               local t_start = get_tr_start(yy)
               local t_len  = get_tr_len(yy)
               local level = data.selected[1] == yy and data.selected[2] == x and 15 
               or (x < t_start or x > t_len) and 5
               or data[data.pattern].track.mute[yy] and 5
               or 10
-              
               g:led(x, y, level ) 
           end
         end
-
       else
-          -- patterns
-          local level =
-          x == ptn_change_pending  and sequencer_metro.is_running and  util.clamp(blink, 5, 14)
-          or (data.metaseq.from and data.metaseq.to) and x == data.pattern and  util.clamp(blink, 5, 14)
-          or (x >= (data.metaseq.from and data.metaseq.from or data.pattern) and x <= (data.metaseq.to and data.metaseq.to or data.pattern)) and 9 
-          or data.pattern == x and 15 
-          or 3
-          
-          g:led(x, 1, level)
-
+        -- patterns
+        if y < 5 then 
+            local id = to_id(x,y)
+            --print(id)
+            local level =
+            id == ptn_change_pending  and sequencer_metro.is_running and  util.clamp(blink, 5, 14)
+            or (data.metaseq.from and data.metaseq.to) and id == data.pattern and  util.clamp(blink, 5, 14)
+            or (id >= (data.metaseq.from and data.metaseq.from or data.pattern) and id <= (data.metaseq.to and data.metaseq.to or data.pattern)) and 9 
+            or data.pattern == id and 15 
+            or pattern_exists(x, y) and 6
+            or 2
+            g:led(x, y, level)
+        elseif y == 6 then
+          g:led(x, y, x == data.metaseq.div and 15 or 2)
+        end
       end
     end
     -- playhead

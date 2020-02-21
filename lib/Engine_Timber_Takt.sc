@@ -5,7 +5,7 @@
 Engine_Timber_Takt : CroneEngine {
 
 	var maxVoices = 7;
-	var maxSamples = 100;
+	var maxSamples = 101;
 	var killDuration = 0.003;
 	var waveformDisplayRes = 40;
 
@@ -25,6 +25,7 @@ Engine_Timber_Takt : CroneEngine {
 	var fxBus;
 	var reverbBus;
 	var mixerBus;
+	var sidechainBus;
 
 	var loadQueue;
 	var loadingSample = -1;
@@ -60,8 +61,9 @@ Engine_Timber_Takt : CroneEngine {
 
 			channels: 0,
 			sampleRate: 0,
-			reverbSend: -40,
-			delaySend: -40,
+			reverbSend: -99,
+			delaySend: -99,
+			sidechainSend: -99,
 			numFrames: 0,
 
 			transpose: 0,
@@ -119,6 +121,7 @@ Engine_Timber_Takt : CroneEngine {
 
 		lfoBus = Bus.control(context.server, 2);
 		mixerBus = Bus.audio(context.server, 2);
+		sidechainBus = Bus.audio(context.server, 2);
 		fxBus = Bus.audio(context.server, 2);
 		reverbBus = Bus.audio(context.server, 2);
 		players = Array.newClear(4);
@@ -301,10 +304,10 @@ Engine_Timber_Takt : CroneEngine {
 
 			SynthDef(name, {
 
-				arg out, reverbSendBus, delaySendBus, sampleRate, freq, transposeRatio, detuneRatio = 1, pitchBendRatio = 1, pitchBendSampleRatio = 1, playMode = 0, gate = 0, killGate = 1, vel = 1, pressure = 0, pressureSample = 0, amp = 1,
+				arg out, reverbSendBus, delaySendBus, sidechainSendBus, sampleRate, freq, transposeRatio, detuneRatio = 1, pitchBendRatio = 1, pitchBendSampleRatio = 1, playMode = 0, gate = 0, killGate = 1, vel = 1, pressure = 0, pressureSample = 0, amp = 1,
 				lfos, lfo1Fade, lfo2Fade, freqModLfo1, freqModLfo2, freqModEnv, 
 				ampAttack, ampDecay, ampSustain, ampRelease, modAttack, modDecay, modSustain, modRelease,
-				downSampleTo, bitDepth, reverbSend, delaySend,
+				downSampleTo, bitDepth, reverbSend, delaySend, sidechainSend,
 				filterFreq, filterReso, filterType, filterTracking, filterFreqModLfo1, filterFreqModLfo2, filterFreqModEnv, filterFreqModVel, filterFreqModPressure,
 				pan, panModLfo1, panModLfo2, panModEnv, ampModLfo1, ampModLfo2;
 
@@ -377,6 +380,7 @@ Engine_Timber_Takt : CroneEngine {
 				signal = signal * lfo1.range(1 - ampModLfo1, 1) * lfo2.range(1 - ampModLfo2, 1) * ampEnvelope * killEnvelope * vel.linlin(0, 1, 0.1, 1);
 				signal = tanh(signal * amp.dbamp * (1 + pressure)).softclip;
 				Out.ar(out, signal);
+				Out.ar(sidechainSendBus, signal * sidechainSend.dbamp);
 				Out.ar(delaySendBus, signal * delaySend.dbamp);
 				Out.ar(reverbSendBus, signal * reverbSend.dbamp);
 			}).add;
@@ -386,16 +390,16 @@ Engine_Timber_Takt : CroneEngine {
 		// delay
 		delay = SynthDef(\delay, {
 
-   		  arg in, out, delayTime=0.3, feedbackAmount =0.5, level = 0; 
+   		  arg in, out, delayTime=0.3, feedbackAmount =0.5, level = -10; 
 		  	var signal = In.ar(in, 2);
 		  	var feedback = LocalIn.ar(2);
-        signal = DelayC.ar(signal + feedback, maxdelaytime: 4, delaytime: delayTime);
+        	signal = DelayC.ar(signal + feedback, maxdelaytime: 4, delaytime: delayTime);
 
 				LocalOut.ar(signal * feedbackAmount);
 				Out.ar(out, signal * level.dbamp); 
 
 
-		}).play(target:context.xg, args: [\in, fxBus, \out, context.out_b], addAction: \addToTail);
+		}).play(target:context.xg, args: [\in, fxBus, \out, mixerBus], addAction: \addToTail);
 
 
 
@@ -405,11 +409,8 @@ Engine_Timber_Takt : CroneEngine {
 			 arg in, out, reverbTime=10, damp=0.1, size=3.0, diff=0.7, modDepth=0.1, modFreq=2, low=1, mid=1, high=1, lowcut=500, highcut=200;
 			
 			 var signal = In.ar(in, 2);       
-      signal = JPverb.ar(signal, reverbTime, damp, size, diff, modDepth, modFreq, low, mid, high, lowcut, highcut);
-
-       //signal = Greyhole.ar(signal, reverbTime, damp, size, diff, feedback, modDepth, modFreq ); 
-
-			 Out.ar(out, signal); // * level.dbamp);
+      		 signal = JPverb.ar(signal, reverbTime, damp, size, diff, modDepth, modFreq, low, mid, high, lowcut, highcut);
+			 Out.ar(out, signal);
 
 
 		}).play(target:context.xg, args: [\in, reverbBus, \out, mixerBus,], addAction: \addToTail);
@@ -419,18 +420,25 @@ Engine_Timber_Takt : CroneEngine {
 		// Mixer and FX
 		mixer = SynthDef(\mixer, {
 
-			arg in, out;
-			var signal;
 
-			signal = In.ar(in, 2);
+			 arg in, out, sidechain,  compMix = -1, compLevel = 0, thresh=0.1, slopeBelow=1, slopeAbove=0.1, clampTime=0.01, relaxTime=0.2; //, mul=1, add=0;
+			 var sidechain_sig = In.ar(sidechain, 2);       
+			 var signal = In.ar(in, 2);
+			 
+			 var wet = Compander.ar(signal * compLevel.dbamp, XFade2.ar(signal, sidechain_sig, compMix), thresh, slopeBelow, slopeAbove, clampTime, relaxTime, mul: 1, add: 0);
 
-			// Compression etc
-			signal = CompanderD.ar(in: signal, thresh: 0.7, slopeBelow: 1, slopeAbove: 0.4, clampTime: 0.008, relaxTime: 0.2);
-			signal = tanh(signal).softclip;
+			
+			 signal = CompanderD.ar( signal, 0.7, 1, 0.4, 0.008, 0.2);    
+			 
+			//signal = Compander.ar(signal, sidechain_sig, thresh, slopeBelow, slopeAbove, clampTime, relaxTime, mul: 1, add: 0);
+			
+			signal = tanh(XFade2.ar(signal, wet, compMix).softclip);
+
+			//ReplaceOut.ar(out, XFade2.ar(signal, wet, compMix));
 
 			Out.ar(out, signal);
 
-		}).play(target:context.xg, args: [\in, mixerBus, \out, context.out_b], addAction: \addToTail);
+		}).play(target:context.xg, args: [\in, mixerBus,  \sidechain, sidechainBus, \out, context.out_b], addAction: \addToTail);
 
 
 
@@ -927,6 +935,8 @@ Engine_Timber_Takt : CroneEngine {
 				\delaySendBus, fxBus,
 				\delaySend, sample.delaySend,
 
+				\sidechainSendBus, sidechainBus,
+				\sidechainSend, sample.sidechainSend,
 				
 				\bufnum, buffer.bufnum,
 
@@ -1183,7 +1193,38 @@ Engine_Timber_Takt : CroneEngine {
 		});
 		
     // FX commands
-    
+
+		this.addCommand(\compLevel, "f", { arg msg;
+			mixer.set(\compLevel, msg[1]);
+		});
+
+		this.addCommand(\compMix, "f", { arg msg;
+			mixer.set(\compMix, msg[1]);
+		});
+
+		this.addCommand(\compThreshold, "f", { arg msg;
+			mixer.set(\thresh, msg[1]);
+		});
+
+		this.addCommand(\compSlopeBelow, "f", { arg msg;
+			mixer.set(\slopeBelow, msg[1]);
+		});
+		this.addCommand(\compSlopeAbove, "f", { arg msg;
+			mixer.set(\slopeAbove, msg[1]);
+		});
+
+		this.addCommand(\compClampTime, "f", { arg msg;
+			mixer.set(\clampTime, msg[1]);
+		});
+
+		this.addCommand(\compRelaxTime, "f", { arg msg;
+			mixer.set(\relaxTime, msg[1]);
+		});
+
+
+
+
+
     // Delay
 
 		this.addCommand(\delayTime, "f", { arg msg;
@@ -1397,6 +1438,11 @@ Engine_Timber_Takt : CroneEngine {
 		this.addCommand(\delaySend, "ii", {
 			arg msg;
 			this.setArgOnSample(msg[1], \delaySend, msg[2]);
+		});
+
+		this.addCommand(\sidechainSend, "ii", {
+			arg msg;
+			this.setArgOnSample(msg[1], \sidechainSend, msg[2]);
 		});
 
 		this.addCommand(\filterFreq, "if", {

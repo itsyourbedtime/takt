@@ -6,12 +6,15 @@ local name_lookup = {
   ['SMP'] = 'sample', ['MODE'] = 'play_mode', ['NOTE'] = 'note', ['STRT'] = 'start_frame', ['END'] = 'end_frame', 
   ['FM1'] = 'freq_mod_lfo_1', ['FM2'] = 'freq_mod_lfo_2', ['VOL'] = 'amp', ['PAN'] = 'pan', ['ENV'] = 'env', 
   ['AMP'] = 'amp_mod_lfo_1', ['AM2'] = 'amp_mod_lfo_2', ['SR'] = 'quality', ['TYPE'] = 'filter_type', ['CFM'] = 'filter_freq_mod_lfo_2', 
-  ['RVRB'] = 'reverb_send', ['DEL'] = 'delay_send'
+  ['RVRB'] = 'reverb_send', ['DEL'] = 'delay_send', 
+
 }
 local midi_name_lookup = { 
   [1] = 'note', [2] = 'velocity', [3] = 'length', [4] = 'channel', [5] = 'device', [6] = 'program_change', 
   [7] = 'cc_1_val', [8] = 'cc_2_val', [9] = 'cc_3_val', [10] = 'cc_3_val', [11] = 'cc_4_val', [12] = 'cc_4_val'
 }
+local dividers  = {[0] = 'OFF', '1/8', '1/4', '1/2', '3/4', '--', '3/2', '2x' } 
+
 local filter = controlspec.WIDEFREQ
 
 function ui.init()
@@ -25,6 +28,12 @@ function ui.init()
   for i = 1, 10 do
     ui.waveform[i] = {0,0}
   end
+  ui.reverb = {}
+  ui.reverb.orbit = math.fmod(1,2)~=0 and 6 or 15
+  ui.reverb.position = 1 <= 2 and 0 or 1 <= 4 and 2 or 4
+  ui.reverb.velocity = util.linlin(0, 1, 0.01, 1, 1)
+  
+
 end
 
 function ui.start_polls()
@@ -58,9 +67,8 @@ local function metro_icon(x, y, pos)
 
 end
 
-local dividers  = {[0] = 'OFF', '1/8', '1/4', '1/2', '3/4', '--', '3/2', '2x' } 
 
-function ui.head(params_data, data, view, k1, rules, PATTERN_REC)
+function ui.head(params_data, data, view, k1, rules, PATTERN_REC, preview)
   local tr = data.selected[1]
   local s = data.selected[2]
   local pos = data[data.pattern].track.pos[tr]
@@ -176,16 +184,42 @@ else
         end
     end
   else
-    
-    screen.level(data.ui_index == -2 and 5 or 2)  
-    screen.rect(85, 0, 41, 7)
-    screen.fill()
-    screen.level(0)
-    screen.move(87,6)
-    screen.text('SYNC')
-    screen.move(120,6)
-    screen.text_right(dividers[data[data.pattern].sync_div])
-    screen.stroke() 
+    if preview then
+      screen.level(2)
+      screen.rect(85, 0, 41, 7)
+      screen.fill()
+
+      screen.level(0)
+      screen.move(87,6)
+      screen.text('PREVIEW')
+      screen.stroke()
+    else
+      screen.level(data.ui_index == -2 and 5 or 2)  
+      screen.rect(85, 0, 20, 7)
+      screen.fill()
+      screen.level(0)
+      screen.move(95,6)
+
+      screen.text_center(dividers[data[data.pattern].sync_div])
+      screen.stroke()
+      screen.level(data.ui_index == -1 and 5 or 2) 
+      screen.rect(106, 0, 20, 7)
+      screen.fill()
+      screen.level(0)
+      screen.rect(109 , 3, 15, 2)
+      screen.stroke()
+      screen.level(data.ui_index == -1 and 5 or 2) 
+      screen.pixel(108, 2)
+      screen.pixel(108, 4)
+      screen.pixel(123, 2)
+      screen.pixel(123, 4)
+      screen.fill()
+      screen.level(1)
+
+      screen.rect(109, 3, util.linlin(-99, 0, 0, 14, data[data.pattern][tr].params[tostring(tr)].sidechain_send), 1)
+
+      screen.fill() 
+    end
   end
 end
 
@@ -323,7 +357,7 @@ local function draw_start_end_markers(x, y, w, h, ui_index, params_data, meta, l
 
   set_brightness(3, ui_index)
   screen.move(start_x, y)
-  screen.line(start_x, y + h)
+  screen.line(start_x, y + h )
   screen.stroke()
  
   local arrow_direction = 1
@@ -331,17 +365,20 @@ local function draw_start_end_markers(x, y, w, h, ui_index, params_data, meta, l
   local clamp = util.clamp(start_x + 0.5 * arrow_direction, 0, (x + w) - 1)
   screen.move(clamp, y + 1)
   screen.line_rel(2 * arrow_direction, 2)
-  screen.pixel(start_x + 0.5 * arrow_direction, y + 3)
+  screen.stroke()
+
+  screen.pixel(clamp , y + 3)
 
   screen.stroke()
   
   set_brightness(4, ui_index)
-  screen.move(end_x, y)
+  screen.move(end_x, y )
   screen.line(end_x, y + h)
   screen.stroke()
 
   
 end
+
 
 function ui.draw_waveform(x, y, params_data, ui_index, meta, lock)
     screen.level(2)
@@ -379,7 +416,7 @@ function ui.draw_note(x, y, params_data, index, ui_index, lock)
   set_brightness(index, ui_index)
   screen.rect(x,  y, 20, 17)
   screen.fill()
-  local offset = params_data.detune_cents and util.linlin(-100,100,-5,5, params_data.detune_cents) or 0
+  local offset = params_data.detune_cents and util.linlin(-100,100,-3,3, params_data.detune_cents) or 0
   screen.level(0)
   screen.rect(x + 7 + offset, y + 6, 3, 2)
   screen.rect(x + 8 + offset, y + 6, 3, 1)
@@ -465,23 +502,23 @@ function ui.tile(index, name, value, ui_index, lock, custom)
 end
 
 
-local count = 1
+local count = { 1, 1}
 
-function lfo(x, y, f, s, amp, update)
+function lfo(x, y, n, f, s, amp, width)
     local left = x + 5
     local top = y + 5
 
     local lowamp = 0.5
-    local highamp = 1
+    local highamp = 1 + amp
 
-    screen.level(0)
-    local width = 10
+    --screen.level(0)
+    local width = width and width or 10
     
-    count = (count + 0.3)  + util.expexp(0.05, 20, 0.11, 0.13, f)  
+    count[n] = (count[n] + 0.3)  + util.expexp(0.05, 20, 0.11, 0.13, f)  
 
     local i = 2
     for j = 1, width do
-      local amp = math.sin((count  * (i == 1 and 1 or 2) / 0.3 + j / width)  * (i == 1 and 2 or 4) * math.pi) 
+      local amp = math.sin((count[n]  * (i == 1 and 1 or 2) / 0.3 + j / width)  * (i == 1 and 2 or 4) * math.pi) 
         * util.linlin(1, width / 2, lowamp, highamp, j < (width / 2) and j or width - j) - 0.75 
         * util.linlin(1, width / 2, lowamp, highamp, j < (width / 2) and j or width - j)-(util.linexp(0, 1, 0.5, 6, j/width) * 0) 
         or 0
@@ -568,7 +605,8 @@ function ui.draw_lfo(x, y, lfo_num, params_data, index,  ui_index, lock, n)
   if index == ui_index then
     local shape = params:get('lfo_'.. lfo_num .. '_wave_shape')
     local freq = params:get('lfo_'.. lfo_num ..'_freq')
-    lfo(x, y, freq, shape, value)
+    screen.level(0)
+    lfo(x, y, lfo_num, freq, shape, 0)
     
   else
     screen.level(0)
@@ -581,6 +619,74 @@ function ui.draw_lfo(x, y, lfo_num, params_data, index,  ui_index, lock, n)
   screen.level(lvl)
   ui.draw_level_meter(x, y, 0, 1, value, index,  ui_index, lock)
 end
+
+local sr_types = { '8k', '16k', '26k', '32k', '48k' }
+local f_types = { 'LPF', 'HPF' } 
+
+
+function ui.is_lock(t, params_data)
+  local lock = false
+  if params_data.default then
+    local tile_name = t[2]
+    local tile_value = t[3]
+    local param_name = name_lookup[t[2]] 
+
+    local default = params_data.default[param_name]
+
+    if tile_name == 'SR' then
+      lock = sr_types[default] ~= tile_value and true or false
+    elseif tile_name == 'TYPE' then
+      lock = f_types[default] ~= tile_value and true or false
+    else
+      lock = (lock == false and default ~= params_data[param_name]) and true or false
+    end
+  end
+
+  return lock
+end
+
+
+---- fx 
+
+
+function ui.draw_delay(x, y, index )
+  screen.level((index > 11 and index < 15) and 6 or 2)
+  screen.rect(x,  y, 20, 17)
+  screen.fill()
+  screen.level(0)
+
+
+  screen.level(0)
+  screen.move(x + 10, y + 7)
+  if  index > 11  and index < 15 then
+    local n = {[12] = "VOL", [13] = "TIME",[14] = 'FBK'} 
+    screen.text_center(n[index])
+  else
+    screen.text_center('DEL')
+  end
+  local v = { [12] = { params:get('delay_level'), -99, 0} , [13] = {params:get('delay_time'), 0, 3 } ,[14] = {params:get('delay_feedback'), 0, 1},}
+
+  local i = (index > 11 and index < 15) and index or 12
+  ui.draw_level_meter(x, y, v[i][2], v[i][3], v[i][1] or v[i][1], i, index)
+
+  local vol = util.linlin(-99, 0, 1, 5, params:get('delay_level'))
+  local feedback = util.linlin(0, 1, 0, 4, params:get('delay_feedback'))
+  local time = util.round(util.linlin(0.0001, 3, 0.5, 8 - feedback, params:get('delay_time')))
+  screen.level(2)
+  screen.rect(x + 22, y + 1, 40, 16)
+  screen.stroke()
+  for i = 1, 2 + feedback do
+    local lvl = (index == 13 and i == 2+feedback) and 6 or (index == 14 and i == 1) and 6 or 1
+
+    screen.level(0)
+    screen.circle(x  + (43+((time + feedback)*2)) - (i*(1 + time)) , y + 9,  1 + vol )
+    screen.fill()
+    screen.level(lvl)
+    screen.circle(x  + (43+ ((time + feedback)*2))- (i*(1 + time)) , y + 9, 1 + vol)
+    screen.stroke()
+  end
+end
+
 
 function ui.midi_screen(params_data, ui_index, tracks, steps)
 
@@ -654,49 +760,46 @@ function ui.midi_screen(params_data, ui_index, tracks, steps)
 end
 
 
-function ui.main_screen(params_data, ui_index, meta)
-    local sr_types = { '8k', '16k', '26k', '32k', '48k' }
-    local f_types = { 'LPF', 'HPF' } 
+function ui.main_screen(params_data, ui_index, meta, browse)
   
-    local tile = { 
-      {1, 'SMP',  params_data.sample},
-      {2, 'NOTE', function(i, _, lock) ui.draw_note(22, 8, params_data,i, ui_index, lock) end },
-      {3, 'S-E', function(_,_, lock) ui.draw_waveform(43, 8, params_data, ui_index, meta, lock) end },
-      {5, 'FM1', function(i,n,lock) ui.draw_lfo(85, 8, 1, params_data, i, ui_index, lock, n) end },
-      {6, 'FM2', function(i,n,lock) ui.draw_lfo(106, 8, 2, params_data, i, ui_index, lock, n) end },
-      {7, 'VOL', function(i,n,lock) ui.draw_volume(1, 26, -48, 16, params_data[name_lookup[n]], i , ui_index, lock, n) end},
-      {8, 'PAN', function(_, _, lock) ui.draw_pan(22, 26, params_data, ui_index, 8, lock) end },
-      {9, 'ENV', function(lock)  ui.draw_env(45, 42, 'AMP', params_data, ui_index) end },
-      {13, 'AMP', function(i,n,lock) ui.draw_lfo(85, 26, 1, params_data, i, ui_index, lock, n) end }, 
-      {14, 'CFM', function(i,n,lock) ui.draw_lfo(106, 26, 1, params_data, i, ui_index, lock, n) end },
-      {15, 'SR', sr_types[params_data.quality] },
-      {16, 'MODE', function(_, _, lock) ui.draw_mode(25, 59, params_data.play_mode, ui_index, lock) end },
-      {17, 'FILTER', function(lock) ui.draw_filter(45, 60, params_data, ui_index) end },
-      {19, 'DEL', function(i,n,lock) ui.draw_level_meter(85, 44, -40, 0, params_data[name_lookup[n]], i,  ui_index, lock, n) end }, 
-      {20, 'RVRB', function(i,n,lock) ui.draw_level_meter(106, 44, -40, 0, params_data[name_lookup[n]], i , ui_index, lock, n) end },
+  local tile = { 
+    {1, 'SMP',  params_data.sample},
+    {2, 'NOTE', function(i,n,lock) ui.draw_note(22, 8, params_data,i, ui_index, lock) end },
+    {3, 'S-E', function(i,n,lock) ui.draw_waveform(43, 8, params_data, ui_index, meta, lock) end },
+    {5, 'FM1', function(i,n,lock) ui.draw_lfo(85, 8, 1, params_data, i, ui_index, lock, n) end },
+    {6, 'FM2', function(i,n,lock) ui.draw_lfo(106, 8, 2, params_data, i, ui_index, lock, n) end },
+    {7, 'VOL', function(i,n,lock) ui.draw_volume(1, 26, -48, 16, params_data[name_lookup[n]], i , ui_index, lock, n) end},
+    {8, 'PAN', function(i,n,lock) ui.draw_pan(22, 26, params_data, ui_index, 8, lock) end },
+    {9, 'ENV', function(i,n,lock)  ui.draw_env(45, 42, 'AMP', params_data, ui_index) end },
+    {13, 'AMP', function(i,n,lock) ui.draw_lfo(85, 26, 1, params_data, i, ui_index, lock, n) end }, 
+    {14, 'CFM', function(i,n,lock) ui.draw_lfo(106, 26, 1, params_data, i, ui_index, lock, n) end },
+    {15, 'SR', sr_types[params_data.quality] },
+    {16, 'MODE', function(i,n,lock) ui.draw_mode(25, 59, params_data.play_mode, ui_index, lock) end },
+    {17, 'FILTER', function(lock) ui.draw_filter(45, 60, params_data, ui_index) end },
+    {19, 'DEL', function(i,n,lock) ui.draw_level_meter(85, 44, -48, 0, params_data[name_lookup[n]], i,  ui_index, lock, n) end }, 
+    {20, 'RVRB', function(i,n,lock) ui.draw_level_meter(106, 44, -48, 0, params_data[name_lookup[n]], i , ui_index, lock, n) end },
 
-}
-   for k, v in pairs(tile) do
-        
-        local lock = false
-        if params_data.default then
-          if v[2] == 'SR' then
-            lock = sr_types[params_data.default[name_lookup[v[2]]]] ~= v[3] and true or false
-          elseif v[2] == 'TYPE' then
-            lock = f_types[params_data.default[name_lookup[v[2]]]] ~= v[3] and true or false
-          else
-            lock = (lock == false and params_data.default[name_lookup[v[2]]] ~= params_data[name_lookup[v[2]]]) and true or false
-          end
-        end
-        
-        
-      if v[3] and type(v[3]) == 'function' then
-        v[3](v[1], v[2], lock)
-      elseif v[3] then
-        ui.tile(v[1], v[2], v[3], ui_index, lock )
-      end
+  }
+
+  for k, v in pairs(tile) do
+    local lock = ui.is_lock(v, params_data )
+    if v[3] and type(v[3]) == 'function' then
+      v[3](v[1], v[2], lock)
+    elseif v[3] then
+      ui.tile(v[1], v[2], v[3], ui_index, lock )
     end
-    
+  end
+
+  if browse then
+    if browse.open then
+        screen.level(0)
+        screen.rect(43, 8, 83, 53)
+        screen.fill()
+        screen.level(2)
+        screen.rect(44, 9, 82, 52)
+        screen.stroke()
+    end
+  end
 end
 
 
@@ -891,5 +994,264 @@ function ui.sampling(sampler, ui_index, pos)
   screen.stroke()
 end
 
+
+function ui.draw_reverb(x, y, index, stage)
+    local w, h = 40, 34
+    
+    screen.level(2)
+    screen.rect(x, y + 8, w, h - 8)
+    screen.stroke()
+
+    screen.level((index == 10 or index == 11) and 6 or 2)
+    screen.rect(x - 1, y - 1, w + 1, 7)
+    screen.fill()
+
+    local time = util.round(util.linlin(0.1, 60, 0, 2, params:get('reverb_time')))
+    local size = util.round(util.linlin(0, 5, 2, 15, params:get('reverb_size')))
+    local damp = util.round(util.linlin(0, 1, 1, util.round(size - 1), params:get('reverb_damp')))
+    local diff = util.round(util.linlin(0, 1, 1, 3, params:get('reverb_diff')))
+    --local mod_depth = util.linlin(0, 1, 10, 40, params:get('reverb_moddepth'))
+    --local mod_freq = util.linlin(0, 1, 20, 34, params:get('reverb_modfreq'))
+    --local lowcut = util.round(util.linlin(100, 6000, 6, util.round(size), params:get('reverb_lowcut'))) - size
+    --local highcut = util.round( util.linlin(1000, 10000, 0, util.round(size - 6 )  , params:get('reverb_highcut')))
+
+    screen.level(0)
+    screen.move(x + 19, y + 5)
+    if  index > 9  and index < 12 then
+      local n = {[10] = "DAMP", [11] = "DIFF"} -- , [12] = 'LOWCUT', [13] = 'HIGHCUT',}   --[[[11] = 'MOD DEPTH', [12] = 'MOD FREQ',]] 
+      screen.text_center(n[index])
+    else
+      screen.text_center('REVERB')
+    end
+
+    ui.reverb.velocity = util.linlin(0, 1, 0.01, ( time / 5) / (1 / 2), 0.15)
+    ui.reverb.position = (ui.reverb.position - ui.reverb.velocity) % (math.pi * (2 / (diff/2)))
+    ui.reverb.x =  ((ui.reverb.orbit) * (size/(16))) * math.sin(ui.reverb.position / (size - damp)/2)
+    ui.reverb.y = ((ui.reverb.orbit) * (size/16)) * math.sin(ui.reverb.position / (size - damp)/2)
+
+    screen.level(1)
+    local s_x = util.round(size, 1) 
+    local s_y = s_x 
+    local h_x = util.round(s_x / 2,1) 
+
+    local cube_x = util.round((x + 17) - h_x) --+ util.round(ui.reverb.x / 4)  
+    local cube_y = util.round((y + 25) - h_x)
+
+    screen.rect(cube_x + h_x  , cube_y - h_x , s_x , s_y )   
+    screen.stroke()
+
+    screen.level(1)
+    screen.move(cube_x,cube_y - 1 + s_y)
+    screen.line(cube_x+h_x, cube_y - h_x - 1 + s_y)
+    screen.stroke()
+  
+    screen.move(cube_x  + s_x,cube_y - 1 + s_y)
+    screen.line(cube_x+h_x + s_x, cube_y - h_x - 1 + s_y)
+    screen.stroke()
+  
+    screen.level(index == 11 and 15 or 2) -- index > 9 and index < 14 and i or i % 4 )
+    screen.circle(x + (w/2) + (ui.reverb.x  / (16 - size)) , y + (h/1.5) - (ui.reverb.y / (16 - size)), 2 - (ui.reverb.x/10) + diff )
+    screen.fill()
+  
+    if index == 10 then 
+    
+      screen.level(15)
+      screen.move(cube_x + s_x - 1, cube_y - damp + s_x)
+      screen.line(cube_x - 1, cube_y - damp + s_x)
+
+      screen.line(cube_x - 1, cube_y - damp + s_x)
+
+      screen.line(cube_x + h_x - 1, cube_y - damp + s_x - h_x)
+      screen.line(cube_x + h_x + s_x - 1, cube_y - h_x - damp + s_x) 
+
+      screen.close()
+      screen.stroke()
+    end
+--[[    elseif index == 11 then
+
+      screen.level(15)
+      screen.move(cube_x + s_x - 1, cube_y - diff + s_x)
+      screen.line(cube_x - 1, cube_y - diff + s_x)
+
+      screen.line(cube_x - 1, cube_y - diff + s_x)
+
+      screen.line(cube_x + h_x - 1, cube_y - diff + s_x - h_x)
+      screen.line(cube_x + h_x + s_x - 1, cube_y - h_x - diff + s_x) 
+
+      screen.close()
+      screen.stroke()
+]]  
+  
+  
+  
+  screen.level(1)
+  screen.move(cube_x,cube_y - 1)
+  screen.line(cube_x+s_x/2, cube_y - s_y/2 - 1)
+  screen.stroke()
+
+  screen.move(cube_x  + s_x,cube_y - 1)
+  screen.line(cube_x+s_x/2 + s_x, cube_y - s_y/2 - 1)
+  screen.stroke()
+
+  screen.level(1)
+  screen.rect(cube_x, cube_y, s_x, s_y )
+  screen.stroke()
+
+  screen.level(0)
+  screen.rect(x,y + h - 2, w - 2, 1)
+  screen.fill()
+
+  --screen.level(2)
+  --screen.rect(x, y, w, h)
+  --screen.stroke()
+
+
+end
+
+function ui.draw_comp(x, y, index)
+  local w, h = 40, 34
+  
+  screen.level(2)
+  screen.rect(x, y + 8, w, h - 8)
+  screen.stroke()
+  screen.level(index > 2 and index < 8 and 6 or 2)
+  screen.rect(x - 1, y - 1, w + 1, 7)
+  screen.fill()
+
+  local level = util.linlin(-99, 6, 0, 34, params:get('comp_level'))
+  local threshold = util.linexp(0, 1, 5, 15, params:get('comp_threshold'))
+  local slope_b = util.linlin(0, 1, 0, 10, params:get('comp_slopebelow'))
+  local slope_a = util.linlin(0, 1, 0, 10, params:get('comp_slopeabove'))
+  local attack = util.linlin(0, 1, 3, 20, params:get('comp_clamptime'))
+  local release = util.linlin(0, 1, 3, 39, params:get('comp_relaxtime'))
+
+  screen.level(0)
+  screen.move(x + 19, y + 5)
+  if  index < 8  then
+    local n = {[1] = "COMP VOL", [2] = "DRY/WET", [3] = 'THRESH', [4] = 'SLOPE B', [5] = 'SLOPE A', [6] = 'ATTACK', [7] = 'RELEASE'}
+    screen.text_center(n[index])
+  else
+    screen.text_center('DYNAMICS')
+  end
+  
+  screen.stroke()
+  screen.level(index == 6 and 15 or 1)
+  screen.move(x, y + h - slope_a)
+  screen.line(x + attack, y + h - threshold - slope_a)
+  screen.stroke()
+  screen.level(index == 4 and 15 or 1)
+  screen.move(x + attack, y + h - threshold - slope_a)
+  screen.line(x + w - 1 , y + h - threshold - slope_b)
+  screen.stroke()
+  if index == 5 then
+    screen.level(index == 5 and 15 or 1)
+    screen.rect( x + attack - 1, y + h - threshold - slope_a -1, 3, 3)
+    screen.fill()
+  end
+  
+  screen.level(index == 7 and 15 or 1)
+  screen.move(x + release, y + h - threshold - 10)
+  screen.line(x + release, y + h - 1)
+  screen.stroke()
+  --thr
+
+  screen.level(index == 3 and 15 or 1)
+  screen.move(x +  release , y + h - threshold - 10)
+  screen.line(x   , y + h - threshold - 10)
+  screen.stroke()
+  screen.level(1)
+  screen.rect(x + w - 3, y + h - 1 , 1,   - ui.out_l)
+  screen.rect(x + w - 2, y + h - 1, 1,  - ui.out_r)
+  screen.fill()
+end
+
+function ui.draw_lfo_tile(x,y, index)
+  
+  local shapes = {'SIN', 'TRI', 'SAW', 'SQR', 'RND'}
+  local shape1 = params:get('lfo_1_wave_shape')
+  local freq1 = params:get('lfo_1_freq')
+  local shape2 = params:get('lfo_2_wave_shape')
+  local freq2 = params:get('lfo_2_freq')
+ -- print(freq1,freq2,shape1,shape2)
+--  2.0	4.0	1	4
+
+
+  local lvl = (index > 14 and index < 19) and 6 or 2
+  screen.level(lvl)
+  screen.rect(x,  y, 20, 17)
+  screen.fill()
+  screen.level(2)
+  screen.rect(x + 22, y + 1, 40, 16)
+  screen.stroke()
+
+  screen.level(0)
+  screen.move(x + 10, y + 7)
+  
+  if  (index > 14 and index < 19) then
+    local n = {[15] = "FREQ", [16] = "SHP", [17] = "FREQ", [18] = "SHP",} 
+    screen.text_center(n[index])
+  else
+    screen.text_center('LFO')
+  end
+
+
+
+  local lvl2 = (index > 14 and index < 19) and index or 15
+
+ -- local n = index == 16 and 'shape1' or 'shape2'
+  local t = index == 17 and freq1 or freq2
+
+  --if (index == 16 or index == 18 )then 
+    --screen.move(x + 9, y + 8)
+    --screen.text_center(shapes[n] )
+    --screen.stroke()
+  if index == 15 then
+    ui.draw_level_meter(x, y, 0.05, 20, freq1, 15, index)
+  elseif index == 16 then
+    screen.move(x + 10, y + 15)
+    screen.text_center(shapes[shape1] )
+    screen.stroke()
+  elseif index == 17 then
+    ui.draw_level_meter(x, y, 0.05, 20, freq2, 17, index)
+  elseif index == 18 then
+    screen.move(x + 10, y + 15)
+    screen.text_center(shapes[shape2] )
+    screen.stroke()
+  else
+    ui.draw_level_meter(x, y, 0.05, 20, freq1, 15, index)
+  end
+
+  screen.level((index == 15 or index == 16) and 6 or 1)
+  lfo(x + 17, y, 1, util.clamp(freq1,0.2,20), shape1, 1, 38)
+  screen.level((index == 17 or index == 18) and 6 or 1)
+  lfo(x + 17, y + 8, 2, util.clamp(freq2,0.2, 20), shape2, 1, 38)
+end
+
+function ui.patterns(pattern, metaseq, ui_index, stage)
+  local tile = { 
+
+    {1, 'VOL', function(i,n) ui.draw_level_meter(1, 8, -99, 6,    params:get('comp_level'), i,  ui_index, false, n) end},
+    {2, 'MIX', function(i,n) ui.draw_level_meter(1, 26, -1, 1,    params:get('comp_mix'), 2, ui_index, false, n)    end},
+    {4, 'TIME', function(i,n) ui.draw_level_meter(64, 8, 0.1, 60, params:get('reverb_time'), 8,  ui_index, false, n) end},
+    {10,'SIZE', function(i,n) ui.draw_level_meter(64, 26, 0, 5,   params:get('reverb_size'), 9,  ui_index, false, n) end},
+
+}
+
+for k, v in pairs(tile) do
+        
+  
+if v[3] and type(v[3]) == 'function' then
+  v[3](v[1], v[2])
+elseif v[3] then
+  ui.tile(v[1], v[2], v[3], ui_index, lock )
+end
+end
+
+ui.draw_comp(23, 9, ui_index)
+ui.draw_reverb(86, 9, ui_index, stage)
+ui.draw_delay(1, 44, ui_index)
+ui.draw_lfo_tile(64, 44, ui_index)
+
+end
 
 return ui

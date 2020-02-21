@@ -15,23 +15,17 @@ local Timber = {}
 
 Timber.FileSelect = require "fileselect"
 
-local SCREEN_FRAMERATE = 15
 
 Timber.sample_changed_callback = function() end
 Timber.meta_changed_callback = function() end
 Timber.waveform_changed_callback = function() end
 Timber.play_positions_changed_callback = function() end
 
-Timber.bpm = 120
-Timber.display = "id" -- Can be "id", "note" or "none"
-Timber.shift_mode = false
-Timber.file_select_active = false
-
 local samples_meta = {}
 local specs = {}
 local options = {}
 
-local NUM_SAMPLES = 99 
+local NUM_SAMPLES = 100 
 local STREAMING_BUFFER_SIZE = 65536
 local MAX_FRAMES = 2000000000
 
@@ -47,8 +41,9 @@ local param_ids = {
   "pan", "pan_mod_lfo_1", "pan_mod_lfo_2", "pan_mod_env", "amp", "amp_mod_lfo_1", "amp_mod_lfo_2",
   "amp_env_attack", "amp_env_decay", "amp_env_sustain", "amp_env_release",
   "mod_env_attack", "mod_env_decay", "mod_env_sustain", "mod_env_release",
-  "lfo_1_fade", "lfo_2_fade"
+  "lfo_1_fade", "lfo_2_fade", "delay_send", "reverb_send", "sidechain_send"
 }
+
 local extra_param_ids = {}
 local beat_params = false
 
@@ -63,9 +58,6 @@ specs.LFO_1_FREQ = ControlSpec.new(0.05, 20, "exp", 0, 2, "Hz")
 specs.LFO_2_FREQ = ControlSpec.new(0.05, 20, "exp", 0, 4, "Hz")
 options.LFO_WAVE_SHAPE = {"Sine", "Triangle", "Saw", "Square", "Random"}
 specs.LFO_FADE = ControlSpec.new(-10, 10, "lin", 0, 0, "s")
-
---specs.ReverbDelayTime = ControlSpec.new(0.1, 60, "lin", 0, 2, "s")
---specs.ReverbDamp = ControlSpec.new(0, 5, "lin", 0, 0, "")
 
 options.FILTER_TYPE = {"Low Pass", "High Pass"}
 specs.FILTER_FREQ = ControlSpec.new(20, 20000, "exp", 0, 20000, "Hz")
@@ -82,11 +74,13 @@ specs.MOD_ENV_RELEASE = ControlSpec.new(0.003, 10, "lin", 0, 1, "s")
 options.QUALITY = {"Nasty", "Low", "SP-1200", "Medium", "High"}
 specs.AMP = ControlSpec.new(-48, 16, 'db', 0, 0, "dB")
 
-specs.DELAY_TIME = ControlSpec.new(0.0001, 5, 'exp', 0, 0.1, 'secs')
+specs.DELAY_SEND = ControlSpec.new(-99, 0, 'db', 0, -99, "dB")
+specs.DELAY_TIME = ControlSpec.new(0.0001, 3, 'exp', 0, 0.1, 's')
 specs.DELAY_FEEDBACK = ControlSpec.new(0, 1, 'lin', 0, 0.5, '')
 specs.DELAY_LEVEL = ControlSpec.DB:copy()
 specs.DELAY_LEVEL.default = -10
 
+specs.REVERB_SEND = ControlSpec.new(-99, 0, 'db', 0, -99, "dB")
 specs.REVERB_TIME = controlspec.new(0.1, 60.00, "lin", 0.01, 10, "s")
 specs.REVERB_DAMP = controlspec.new(0.0, 1.0, "lin", 0.01, 0.1, "")
 specs.REVERB_SIZE = controlspec.new(0, 5.0, "lin", 0.01, 3.00, "")
@@ -96,6 +90,16 @@ specs.REVERB_MOD_FREQ = controlspec.new(0.0, 10.0, "lin", 0.01, 2, "hz")
 specs.REVERB_MULT = controlspec.new(0.0, 1.0, "lin", 0.01, 1, "")
 specs.REVERB_LOWCUT = controlspec.new(100, 6000, "lin", 0.01, 500, "hz")
 specs.REVERB_HIGHCUT = controlspec.new(1000, 10000, "lin", 0.01, 2000, "hz")
+specs.COMP_SEND  = ControlSpec.new(-99, 0, 'db', 0, -99, "dB")
+specs.COMP_LEVEL  = ControlSpec.new(-99, 6, 'db', 0, 0, "dB")
+specs.COMP_MIX  = ControlSpec.new(-1, 1, "lin", 0.01, -1, "")
+specs.COMP_THRESHOLD  = ControlSpec.new(0.005, 1, "exp", 0.001, 0.1, "")
+specs.COMP_SLOPEBELOW  = ControlSpec.new(0.7, 1.2, "lin", 0.01, 1, "")
+specs.COMP_SLOPEABOVE  = ControlSpec.new(0, 1, "lin", 0.001, 0.1, "")
+specs.COMP_CLAMPTIME = ControlSpec.new(0.0001, 1, 'exp', 0.001, 0.01, 's')
+specs.COMP_RELAXTIME  = ControlSpec.new(0.0001, 1, 'exp', 0.001, 0.1, 's')
+
+
 
 -- 27khz - 8 bit, 
 QUALITY_SAMPLE_RATES = { 8000, 16000, 26040, 32000, 48000 }
@@ -121,11 +125,6 @@ end
 for i = 1, 100 do
   samples_meta[i] = default_sample()
 end
-
-local waveform_last_edited
-local lfos_last_edited
-local filter_last_edited
-
 
 -- Functions
 
@@ -217,14 +216,6 @@ local function sample_loaded(id, streaming, num_frames, num_channels, sample_rat
     set_play_mode(id, lookup_play_mode(id))
   end
   
-  waveform_last_edited = nil
-  lfos_last_edited = nil
-  filter_last_edited = nil
-  Timber.sample_changed_callback(id)
-  Timber.meta_changed_callback(id)
-  Timber.waveform_changed_callback(id)
-  Timber.play_positions_changed_callback(id)
-  
   samples_meta[id].manual_load = false
 end
 
@@ -232,14 +223,6 @@ local function sample_load_failed(id, error_status)
   
   samples_meta[id] = default_sample()
   samples_meta[id].error_status = error_status
-  
-  waveform_last_edited = nil
-  lfos_last_edited = nil
-  filter_last_edited = nil
-  Timber.sample_changed_callback(id)
-  Timber.meta_changed_callback(id)
-  Timber.waveform_changed_callback(id)
-  Timber.play_positions_changed_callback(id)
   
   samples_meta[id].manual_load = false
 end
@@ -253,7 +236,6 @@ function Timber.clear_samples(first, last)
   
   local extended_params = {}
   for _, v in pairs(param_ids) do table.insert(extended_params, v) end
-  --for _, v in pairs(extra_param_ids) do table.insert(extended_params, v) end
   
   for i = first, last do
     
@@ -274,138 +256,11 @@ function Timber.clear_samples(first, last)
       param.action = param_action
     end
     
-    Timber.meta_changed_callback(i)    
-    Timber.waveform_changed_callback(i)
-    Timber.play_positions_changed_callback(i)
   end
   
 end
 
 
-
-local function build_extended_params(exclusions)
-  
-  exclusions = exclusions or {}
-  local extended_params = {}
-  for _, v in pairs(param_ids) do
-    
-    local include = true
-    for _, e in pairs(exclusions) do
-      if v == e then
-        include = false
-        break
-      end
-    end
-    
-    if include then
-      if v ~= "by_bars" or beat_params then
-        table.insert(extended_params, v)
-      end
-    end
-  end
-  for _, v in pairs(extra_param_ids) do table.insert(extended_params, v) end
-  
-  return extended_params
-end
-
-local function copy_param(from_param, to_param, exclude_controlspec)
-  local to_param_action = to_param.action
-  to_param.action = function(value) end
-  
-  if to_param.t == 3 then -- Control
-    if not exclude_controlspec then to_param.controlspec = from_param.controlspec end
-    to_param:set(from_param:get())
-  elseif to_param.t == 4 then -- File
-    to_param:set(from_param:get())
-  elseif from_param.t ~= 6 then -- Not trigger
-    to_param:set(from_param:get())
-  end
-  
-  to_param.action = to_param_action
-  return to_param
-end
-
-local function move_copy_update(from_id, to_id)
-  local ids = {from_id, to_id}
-  for _, id in pairs(ids) do
-    samples_meta[id].positions = {}
-    samples_meta[id].playing = false
-    Timber.meta_changed_callback(id)    
-    Timber.waveform_changed_callback(id)
-    Timber.play_positions_changed_callback(id)
-  end
-end
-
-function Timber.move_sample(from_id, to_id)
-  
-  if from_id == to_id then return end
-  
-  engine.moveSample(from_id, to_id)
-  
-  local from_meta = samples_meta[from_id]
-  samples_meta[from_id] = samples_meta[to_id]
-  samples_meta[to_id] = from_meta
-  
-  local extended_params = build_extended_params()
-  
-  for k, v in pairs(extended_params) do
-    local from_param = params:lookup_param(v .. "_" .. from_id)
-    local to_param = params:lookup_param(v .. "_" .. to_id)
-    local to_param_orig = copy_table(to_param)
-    
-    to_param = copy_param(from_param, to_param)
-    from_param = copy_param(to_param_orig, from_param)
-  end
-  
-  move_copy_update(from_id, to_id)
-end
-
-function Timber.copy_sample(from_id, to_first_id, to_last_id)
-  
-  engine.copySample(from_id, to_first_id, to_last_id)
-  
-  local extended_params = build_extended_params()
-  
-  for i = to_first_id, to_last_id do
-    if from_id ~= i then
-    
-      samples_meta[i] = copy_table(samples_meta[from_id])
-      
-      for k, v in pairs(extended_params) do
-        local from_param = params:lookup_param(v .. "_" .. from_id)
-        local to_param = params:lookup_param(v .. "_" .. i)
-        
-        to_param = copy_param(from_param, to_param)
-      end
-      
-      move_copy_update(from_id, i)
-    end
-  end
-end
-
-function Timber.copy_params(from_id, to_first_id, to_last_id, param_ids)
-  
-  engine.copyParams(from_id, to_first_id, to_last_id)
-  
-  local exclusions = {"sample", "start_frame", "end_frame", "loop_start_frame", "loop_end_frame", "play_mode"}
-  local extended_params = build_extended_params(exclusions)
-  
-  for i = to_first_id, to_last_id do
-    if from_id ~= i and samples_meta[i].num_frames > 0 then
-      
-      for k, v in pairs(extended_params) do
-        local from_param = params:lookup_param(v .. "_" .. from_id)
-        local to_param = params:lookup_param(v .. "_" .. i)
-        
-        local exclude_controlspec = false
-        --if v == "by_length" then exclude_controlspec = true end
-        to_param = copy_param(from_param, to_param, exclude_controlspec)
-      end
-      
-      move_copy_update(from_id, i)
-    end
-  end
-end
 
 local function store_waveform(id, offset, padding, waveform_blob)
   
@@ -546,11 +401,6 @@ osc.event = Timber.osc_event
 -- NOTE: If you need the OSC callback in your script then Timber.osc_event(path, args, from)
 -- must be called from the end of that function to pass the data down to this lib
 
-function Timber.set_bpm(bpm)
-  Timber.bpm = bpm
-end
-
-
 -- Formatters
 
 local function format_st(param)
@@ -671,14 +521,38 @@ function Timber.add_params()
   params:add_control("reverb_highcut", "Reverb: high cut", specs.REVERB_HIGHCUT)
   params:set_action("reverb_highcut", function(value) engine.reverbHighcut(value) end)
 
+  params:add_separator()
+
+  params:add_control("comp_level", "Comp. level", specs.COMP_LEVEL)
+  params:set_action("comp_level", function(value) engine.compLevel(value) end)
+
+
+  params:add_control("comp_mix", "Comp. dry/wet", specs.COMP_MIX, Formatters.percentage)
+  params:set_action("comp_mix", function(value) engine.compMix(value) end)
+
+  params:add_control("comp_threshold", "Comp. threshold", specs.COMP_THRESHOLD)
+  params:set_action("comp_threshold", function(value) engine.compThreshold(value) end)
+
+  params:add_control("comp_slopebelow", "Comp. slope below", specs.COMP_SLOPEBELOW)
+  params:set_action("comp_slopebelow", function(value) engine.compSlopeBelow(value) end)
+
+  params:add_control("comp_slopeabove", "Comp. slope above", specs.COMP_SLOPEABOVE)
+  params:set_action("comp_slopeabove", function(value) engine.compSlopeAbove(value) end)
+
+  params:add_control("comp_clamptime", "Comp. attack", specs.COMP_CLAMPTIME, Formatters.secs_as_ms)
+  params:set_action("comp_clamptime", function(value) engine.compClampTime(value) end)
+
+  params:add_control("comp_relaxtime", "Comp. release", specs.COMP_RELAXTIME, Formatters.secs_as_ms)
+  params:set_action("comp_relaxtime", function(value) engine.compRelaxTime(value) end)
+
+
 end
 
-function Timber.add_sample_params(id, include_beat_params, extra_params)
+function Timber.add_sample_params(id) 
   
   local name_prefix = ""
   if id then name_prefix = id .. " " end
   id = id or 0
-  if include_beat_params then beat_params = true end
   
   params:add{type = "file", id = "sample_" .. id, name = name_prefix .. "Sample", action = function(value)
     if samples_meta[id].num_frames > 0 or value ~= "-" then
@@ -698,7 +572,7 @@ function Timber.add_sample_params(id, include_beat_params, extra_params)
     else
       samples_meta[id].manual_load = false
     end
-  end}
+  end }
   params:add{type = "trigger", id = "clear_" .. id, name = "Clear", action = function(value)
     Timber.clear_samples(id)
   end}
@@ -836,11 +710,14 @@ function Timber.add_sample_params(id, include_beat_params, extra_params)
   params:add_separator()
   
 
-  
-  params:add_control("delay_send_" .. id, "Delay send", ControlSpec.new(-40, 0, 'db', 0, -40, "dB"))
+  params:add_control("sidechain_send_" .. id, "Sidechain send", specs.COMP_SEND)
+  params:set_action("sidechain_send_" .. id, function(value) engine.sidechainSend(id, value) end)
+  params:add_control("delay_send_" .. id, "Delay send", specs.DELAY_SEND)
   params:set_action("delay_send_" .. id, function(value) engine.delaySend(id, value) end)
-  params:add_control("reverb_send_" .. id, "Reverb send", ControlSpec.new(-40, 0, 'db', 0, -40, "dB"))
+  params:add_control("reverb_send_" .. id, "Reverb send", specs.REVERB_SEND)
   params:set_action("reverb_send_" .. id, function(value) engine.reverbSend(id, value) end)
+
+  params:add_separator()
 
 
   params:add{type = "control", id = "lfo_1_fade_" .. id, name = "LFO1 Fade", controlspec = specs.LFO_FADE, formatter = format_fade, action = function(value)
@@ -913,7 +790,7 @@ function Timber.init()
   
   for i = 1, NUM_SAMPLES do
     params:add_separator()
-    Timber.add_sample_params(i, true) 
+    Timber.add_sample_params(i) 
   end
   
 end
