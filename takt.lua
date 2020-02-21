@@ -998,12 +998,10 @@ function key(n,z)
         --open_settings(5.5)
       elseif not view.steps_midi then
       if data.ui_index == 1 and z == 1  then 
-        --browser.open = true
-        local sample_id = data[data.pattern][data.selected[1]].params[is_lock()].sample
-        browser.enter(_path.audio, timber.load_sample, sample_id)
-        --open_sample_settings()
+          local sample_id = data[data.pattern][data.selected[1]].params[is_lock()].sample
+          browser.enter(_path.audio, timber.load_sample, sample_id)
       elseif (data.ui_index == 3 or data.ui_index == 4) and z == 1 and sample_not_loaded(get_sample()) then
-         open_sample_settings()
+          browser.enter(_path.audio, timber.load_sample, sample_id)
       elseif (data.ui_index == 17 or data.ui_index == 18) and z == 1 then
           change_filter_type()
       elseif lfo_1[data.ui_index] then

@@ -203,22 +203,29 @@ else
       screen.text_center(dividers[data[data.pattern].sync_div])
       screen.stroke()
       screen.level(data.ui_index == -1 and 5 or 2) 
-      screen.rect(106, 0, 20, 7)
-      screen.fill()
-      screen.level(0)
-      screen.rect(109 , 3, 15, 2)
-      screen.stroke()
-      screen.level(data.ui_index == -1 and 5 or 2) 
-      screen.pixel(108, 2)
-      screen.pixel(108, 4)
-      screen.pixel(123, 2)
-      screen.pixel(123, 4)
-      screen.fill()
-      screen.level(1)
 
-      screen.rect(109, 3, util.linlin(-99, 0, 0, 14, data[data.pattern][tr].params[tostring(tr)].sidechain_send), 1)
+      if tr < 8 then
+        screen.rect(106, 0, 20, 7)
+        screen.fill()
+        screen.level(0)
+        screen.rect(109 , 3, 15, 2)
+        screen.stroke()
+        screen.level(data.ui_index == -1 and 5 or 2) 
+        screen.pixel(108, 2)
+        screen.pixel(108, 4)
+        screen.pixel(123, 2)
+        screen.pixel(123, 4)
+        screen.fill()
+        screen.level(1)
 
-      screen.fill() 
+        screen.rect(109, 3, util.linlin(-99, 0, 0, 14, data[data.pattern][tr].params[tostring(tr)].sidechain_send), 1)
+
+        screen.fill() 
+      else
+        screen.rect(106, 0, 20, 7)
+        screen.fill()
+
+      end
     end
   end
 end
