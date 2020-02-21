@@ -1001,6 +1001,7 @@ function key(n,z)
           local sample_id = data[data.pattern][data.selected[1]].params[is_lock()].sample
           browser.enter(_path.audio, timber.load_sample, sample_id)
       elseif (data.ui_index == 3 or data.ui_index == 4) and z == 1 and sample_not_loaded(get_sample()) then
+          local sample_id = data[data.pattern][data.selected[1]].params[is_lock()].sample
           browser.enter(_path.audio, timber.load_sample, sample_id)
       elseif (data.ui_index == 17 or data.ui_index == 18) and z == 1 then
           change_filter_type()
