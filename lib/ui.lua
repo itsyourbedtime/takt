@@ -551,13 +551,13 @@ function ui.draw_level_meter(x, y, minv, maxv, value, index, ui_index, lock, n)
       local lvl = lock == true and 15 or 0
       screen.level(lvl)
     end
-    
+    local h = maxv == 0 and 20 or 0
     screen.rect(x + 4, y + 12, 13, 3)
     screen.stroke()
     
     screen.level(1)
     screen.rect(x + 4, y + 12, util.linlin(minv, maxv, 0, 12, value) , 1)
-    screen.rect(x + 4, y + 13, util.linlin(minv, maxv-(maxv/10), 0, 12, value) , 1)
+    screen.rect(x + 4, y + 13, util.linlin(minv, maxv-((maxv+h)/10), 0, 12, value) , 1)
     screen.fill()
 
     set_brightness(index, ui_index)
