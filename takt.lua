@@ -595,7 +595,7 @@ end
 
 local track_params = {
   [-6] = function(tr, s, d) -- ptn
-      local pt = (util.clamp(data.pattern + d, 1, 16))
+      local pt = (util.clamp(data.pattern + d, 1, 64))
       change_pattern(pt)
       data.metaseq.from = false --data.pattern
       data.metaseq.to = false --data.pattern
@@ -620,7 +620,7 @@ local track_params = {
     data[data.pattern].sync_div = util.clamp(data[data.pattern].sync_div + d, 0, 7)
     if data[data.pattern].sync_div == 0 then midi_clock.send = false else midi_clock.send = true end
 end,
-[-1] = function(tr, s, d) -- midi out bpm scale
+[-1] = function(tr, s, d) -- sidechain
      data[data.pattern][tr].params[tostring(tr)].sidechain_send = util.clamp(data[data.pattern][tr].params[tostring(tr)].sidechain_send + d, -99, 0 )
 end,
 }
@@ -925,7 +925,7 @@ function enc(n,d)
       if not K1_is_hold() then 
         data.ui_index = util.clamp(data.ui_index + d, not data.selected[2] and 1 or -3, (view.steps_midi or view.patterns) and 18 or 20)
       else
-        data.ui_index = util.clamp(data.ui_index + d, -6, -1)
+        data.ui_index = util.clamp(data.ui_index + d, view.patterns and -1 or -6, -1)
       end
     else
       if not sampler.rec then
@@ -934,7 +934,11 @@ function enc(n,d)
     end
   elseif n == 3 then
     if view.patterns then 
+      if K1_is_hold() then
+        track_params[-1](tr, p, d)
+      else
         params_fx[data.ui_index](d)
+      end
     elseif not view.sampling then
       
       local p = is_lock()
@@ -976,8 +980,10 @@ function key(n,z)
     browser.key(n, z)
 
   elseif n == 1 then
-    if K1_is_hold() and (not view.sampling and not view.patterns) then 
+    if K1_is_hold() and not view.sampling and not view.patterns then 
       data.ui_index = -4 
+    elseif K1_is_hold() and view.patterns then
+      data.ui_index = -1 
     else 
       data.ui_index = 1 
     end

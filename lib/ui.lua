@@ -1134,7 +1134,7 @@ function ui.draw_comp(x, y, index)
 
   screen.level(0)
   screen.move(x + 19, y + 5)
-  if  index < 8  then
+  if (index > 0 and index < 8)  then
     local n = {[1] = "COMP VOL", [2] = "DRY/WET", [3] = 'THRESH', [4] = 'SLOPE B', [5] = 'SLOPE A', [6] = 'ATTACK', [7] = 'RELEASE'}
     screen.text_center(n[index])
   else
