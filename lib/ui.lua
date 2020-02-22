@@ -190,9 +190,22 @@ else
       screen.fill()
 
       screen.level(0)
-      screen.move(87,6)
+
+      screen.move(88, 6)
+      screen.line(88, 1)
+      screen.stroke()
+      screen.move(88, 1)
+      screen.line(91, 4)
+      screen.stroke()
+      screen.move(91,3)
+      screen.line(88, 6)
+      screen.stroke()
+
+      screen.move(97,6)
       screen.text('PREVIEW')
       screen.stroke()
+
+
     else
       screen.level(data.ui_index == -2 and 5 or 2)  
       screen.rect(85, 0, 20, 7)
@@ -767,7 +780,7 @@ function ui.midi_screen(params_data, ui_index, tracks, steps)
 end
 
 
-function ui.main_screen(params_data, ui_index, meta, browse)
+function ui.main_screen(params_data, ui_index, meta)
   
   local tile = { 
     {1, 'SMP',  params_data.sample},
@@ -794,17 +807,6 @@ function ui.main_screen(params_data, ui_index, meta, browse)
       v[3](v[1], v[2], lock)
     elseif v[3] then
       ui.tile(v[1], v[2], v[3], ui_index, lock )
-    end
-  end
-
-  if browse then
-    if browse.open then
-        screen.level(0)
-        screen.rect(43, 8, 83, 53)
-        screen.fill()
-        screen.level(2)
-        screen.rect(44, 9, 82, 52)
-        screen.stroke()
     end
   end
 end

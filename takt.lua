@@ -1063,7 +1063,7 @@ function redraw(stage)
       elseif params_data.start_frame > max_len then
         get_sample_start(tr, is_lock())
       end
-      ui.main_screen(redraw_params[1], data.ui_index, meta, browser)
+      ui.main_screen(redraw_params[1], data.ui_index, meta)
       if browser.open then browser.redraw() end
     else
       ui.midi_screen(redraw_params[1], data.ui_index, data[data.pattern].track, data[data.pattern])

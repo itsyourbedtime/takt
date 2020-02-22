@@ -144,6 +144,15 @@ end
 
 
 fs.redraw = function()
+    
+    screen.level(0)
+    screen.rect(43, 8, 83, 53)
+    screen.fill()
+    screen.level(2)
+    screen.rect(44, 9, 82, 52)
+    screen.stroke()
+
+
     if #fs.list == 0 then
         screen.level(4)
         screen.move(45, 15)
@@ -157,6 +166,11 @@ fs.redraw = function()
             screen.level(fs.pos + 1 == list_index and 9 or 2)
             screen.text(fs.display_list[list_index] or '')
             screen.stroke()
+        end
+        if #fs.list > 6 then 
+            screen.level(1)
+            screen.rect(123, 10 + (fs.pos), 1, 50 - #fs.list)
+            screen.fill()
         end
     end
 end
