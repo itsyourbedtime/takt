@@ -523,15 +523,15 @@ function Timber.add_params()
 
   params:add_separator()
 
-  params:add_control("comp_level", "Comp. level", specs.COMP_LEVEL)
-  params:set_action("comp_level", function(value) engine.compLevel(value) end)
+  params:add_control("takt_comp_level", "Comp. level", specs.COMP_LEVEL)
+  params:set_action("takt_comp_level", function(value) engine.compLevel(value) end)
 
 
-  params:add_control("comp_mix", "Comp. dry/wet", specs.COMP_MIX, Formatters.percentage)
-  params:set_action("comp_mix", function(value) engine.compMix(value) end)
+  params:add_control("takt_comp_mix", "Comp. dry/wet", specs.COMP_MIX, Formatters.percentage)
+  params:set_action("takt_comp_mix", function(value) engine.compMix(value) end)
 
-  params:add_control("comp_threshold", "Comp. threshold", specs.COMP_THRESHOLD)
-  params:set_action("comp_threshold", function(value) engine.compThreshold(value) end)
+  params:add_control("takt_comp_threshold", "Comp. threshold", specs.COMP_THRESHOLD)
+  params:set_action("takt_comp_threshold", function(value) engine.compThreshold(value) end)
 
   params:add_control("comp_slopebelow", "Comp. slope below", specs.COMP_SLOPEBELOW)
   params:set_action("comp_slopebelow", function(value) engine.compSlopeBelow(value) end)
