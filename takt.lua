@@ -133,14 +133,14 @@ local prev_level_val = 0
 local function comp_shut(state)
     if state then
         print('run')
-        params:set('comp_mix', prev_mix_val)
-        params:set('comp_level', prev_level_val)
+        params:set('takt_comp_mix', prev_mix_val)
+        params:set('takt_comp_level', prev_level_val)
     elseif not state then 
         print('stop')
-        prev_mix_val = params:get('comp_mix')
-        prev_level_val = params:get('comp_level')
-        params:set('comp_mix', -1)
-        params:set('comp_level', -99)
+        prev_mix_val = params:get('takt_comp_mix')
+        prev_level_val = params:get('takt_comp_level')
+        params:set('takt_comp_mix', -1)
+        params:set('takt_comp_level', -99)
     end
 
 end
@@ -829,11 +829,11 @@ local controls = {
 }
 
 local params_fx = {
-  [1] = function(d) params:set('comp_level', params:get('comp_level') + d) end,
-  [2] = function(d) params:set('comp_mix', params:get('comp_mix') + d / 50) end,
+  [1] = function(d) params:set('takt_comp_level', params:get('takt_comp_level') + d) end,
+  [2] = function(d) params:set('takt_comp_mix', params:get('takt_comp_mix') + d / 50) end,
   [3] = function(d)
-    local val = threshold_map:unmap(params:get('comp_threshold'))
-    params:set('comp_threshold', threshold_map:map(util.clamp(val + d /200, 0.001, 1 ))) 
+    local val = threshold_map:unmap(params:get('takt_comp_threshold'))
+    params:set('takt_comp_threshold', threshold_map:map(util.clamp(val + d /200, 0.001, 1 ))) 
   end, 
   [4] = function(d) params:set('comp_slopebelow', params:get('comp_slopebelow') + d / 100) end,
   [5] = function(d) params:set('comp_slopeabove', params:get('comp_slopeabove') + d / 100) end,

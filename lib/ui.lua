@@ -1127,8 +1127,8 @@ function ui.draw_comp(x, y, index)
   screen.rect(x - 1, y - 1, w + 1, 7)
   screen.fill()
 
-  local level = util.linlin(-99, 6, 0, 34, params:get('comp_level'))
-  local threshold = util.linexp(0, 1, 5, 15, params:get('comp_threshold'))
+  local level = util.linlin(-99, 6, 0, 34, params:get('takt_comp_level'))
+  local threshold = util.linexp(0, 1, 5, 15, params:get('takt_comp_threshold'))
   local slope_b = util.linlin(0, 1, 0, 10, params:get('comp_slopebelow'))
   local slope_a = util.linlin(0, 1, 0, 10, params:get('comp_slopeabove'))
   local attack = util.linlin(0, 1, 3, 20, params:get('comp_clamptime'))
@@ -1239,8 +1239,8 @@ end
 function ui.patterns(pattern, metaseq, ui_index, stage)
   local tile = { 
 
-    {1, 'VOL', function(i,n) ui.draw_level_meter(1, 8, -99, 6,    params:get('comp_level'), i,  ui_index, false, n) end},
-    {2, 'MIX', function(i,n) ui.draw_level_meter(1, 26, -1, 1,    params:get('comp_mix'), 2, ui_index, false, n)    end},
+    {1, 'VOL', function(i,n) ui.draw_level_meter(1, 8, -99, 6,    params:get('takt_comp_level'), i,  ui_index, false, n) end},
+    {2, 'MIX', function(i,n) ui.draw_level_meter(1, 26, -1, 1,    params:get('takt_comp_mix'), 2, ui_index, false, n)    end},
     {4, 'TIME', function(i,n) ui.draw_level_meter(64, 8, 0.1, 60, params:get('reverb_time'), 8,  ui_index, false, n) end},
     {10,'SIZE', function(i,n) ui.draw_level_meter(64, 26, 0, 5,   params:get('reverb_size'), 9,  ui_index, false, n) end},
 
